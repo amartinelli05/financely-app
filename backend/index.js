@@ -45,6 +45,23 @@ app.post('/nova-transacao', async (req, res) => {
   }
 });
 
+// Rota para listar as transações (Extrato)
+app.get('/listar-transacoes', async (req, res) => {
+  try {
+    const query = `
+      SELECT t.id_transacao, t.valor, t.descricao, t.data_transacao, c.nome_categoria 
+      FROM transacoes t 
+      JOIN categorias c ON t.id_categoria = c.id_categoria
+      ORDER BY t.data_transacao DESC 
+      LIMIT 10
+    `;
+    const result = await pool.query(query);
+    res.json(result.rows);
+  } catch (err) {
+    res.status(500).json({ erro: "Erro ao buscar transações: " + err.message });
+  }
+});
+
 app.listen(port, () => {
   console.log(`Servidor do Financely rodando em http://localhost:${port}`);
 });

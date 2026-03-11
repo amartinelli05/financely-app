@@ -44,7 +44,32 @@ app.post('/nova-transacao', async (req, res) => {
     res.status(500).json({ erro: "Erro ao salvar: " + err.message });
   }
 });
+app.put('/editar-transacao/:id', (req, res) => {
+  const { id } = req.params;
+  const { descricao, valor, id_categoria } = req.body;
+  const sql = 'UPDATE transacoes SET descricao = ?, valor = ?, id_categoria = ? WHERE id_transacao = ?';
 
+  db.query(sql, [descricao, valor, id_categoria, id], (err, result) => {
+    if (err) {
+      console.error('Erro ao editar:', err);
+      return res.status(500).send('Erro ao atualizar registro');
+    }
+    res.status(200).send('Registro atualizado com sucesso');
+  });
+});
+// Rota para deletar uma transação
+app.delete('/deletar-transacao/:id', (req, res) => {
+  const { id } = req.params;
+  const sql = 'DELETE FROM transacoes WHERE id_transacao = ?';
+
+  db.query(sql, [id], (err, result) => {
+    if (err) {
+      console.error('Erro ao deletar:', err);
+      return res.status(500).send('Erro ao excluir registro');
+    }
+    res.status(200).send('Registro excluído com sucesso');
+  });
+});
 // Rota para listar as transações (Extrato)
 app.get('/listar-transacoes', async (req, res) => {
   try {

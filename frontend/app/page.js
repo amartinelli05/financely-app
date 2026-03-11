@@ -1,119 +1,46 @@
 'use client'
-import './globals.css';
-import { useState, useEffect } from 'react'
+import Link from 'next/link'
 
-export default function Home() {
-  const [categorias, setCategorias] = useState([])
-  const [transacoes, setTransacoes] = useState([])
-  const [valor, setValor] = useState('')
-  const [descricao, setDescricao] = useState('')
-  const [categoriaSelecionada, setCategoriaSelecionada] = useState('')
-  const [mensagem, setMensagem] = useState('')
-
-  const carregarDados = async () => {
-    try {
-      const resCat = await fetch('http://localhost:3000/testar-banco')
-      const dataCat = await resCat.json()
-      setCategorias(dataCat)
-      const resTrans = await fetch('http://localhost:3000/listar-transacoes')
-      const dataTrans = await resTrans.json()
-      setTransacoes(dataTrans)
-    } catch (err) { console.error(err) }
-  }
-
-  useEffect(() => { carregarDados() }, [])
-
-  const salvarGasto = async (e) => {
-    e.preventDefault()
-    const res = await fetch('http://localhost:3000/nova-transacao', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        id_categoria: parseInt(categoriaSelecionada),
-        valor: parseFloat(valor),
-        tipo_movimento: 'Saída',
-        descricao: descricao
-      })
-    })
-    if (res.ok) {
-      setMensagem("Gasto registrado!"); carregarDados();
-      setValor(''); setDescricao(''); setCategoriaSelecionada('');
-      setTimeout(() => setMensagem(''), 3000)
-    }
-  }
-
-  const totalGasto = transacoes.reduce((acc, t) => acc + parseFloat(t.valor), 0)
-
+export default function LandingPage() {
   return (
-    <div className="space-y-10">
-      <header className="flex flex-col md:flex-row justify-between items-end border-b border-slate-200 pb-8 gap-4">
-        <div>
-          <h2 className="text-3xl font-bold text-slate-800 tracking-tight">Resumo Financeiro</h2>
-          <p className="text-slate-500">Controle seus gastos de forma simples.</p>
-        </div>
-        <div className="bg-white px-8 py-5 rounded-3xl border border-slate-200 shadow-sm text-right">
-          <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Total Gasto</span>
-          <p className="text-3xl font-black text-indigo-600 leading-none mt-1">
-            R$ {totalGasto.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
-          </p>
-        </div>
-      </header>
+    <div className="min-h-screen flex flex-col justify-center items-center text-center p-6 bg-white relative overflow-hidden">
+      
+      {/* 🖼️ IMAGEM DE FUNDO (Ajustada para aparecer mais) */}
+      <div 
+        className="absolute inset-0 z-0 opacity-[0.25] pointer-events-none" // Aumentei de 0.08 para 0.25
+        style={{ 
+          backgroundImage: "url('/financely_fundo.png')", 
+          backgroundSize: '1000px', // Ícones maiores
+          backgroundRepeat: 'repeat',
+          backgroundPosition: 'center'
+        }}
+      ></div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-10">
-        {/* Card de Cadastro */}
-        <div className="lg:col-span-4">
-          <div className="bg-white p-8 rounded-[2.5rem] shadow-sm border border-slate-200">
-            <h3 className="text-lg font-bold mb-8 text-slate-800">Novo Registro</h3>
-            <form onSubmit={salvarGasto} className="space-y-6">
-              <div className="space-y-2">
-                <label className="text-[10px] font-bold text-slate-400 uppercase ml-1">Descrição</label>
-                <input type="text" required className="w-full p-4 bg-slate-50 border border-slate-100 rounded-2xl outline-none focus:ring-2 focus:ring-indigo-100 transition-all" 
-                  placeholder="Ex: Almoço" value={descricao} onChange={e => setDescricao(e.target.value)} />
-              </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <label className="text-[10px] font-bold text-slate-400 uppercase ml-1">Valor</label>
-                  <input type="number" step="0.01" required className="w-full p-4 bg-slate-50 border border-slate-100 rounded-2xl outline-none focus:ring-2 focus:ring-indigo-100 transition-all" 
-                    placeholder="0,00" value={valor} onChange={e => setValor(e.target.value)} />
-                </div>
-                <div className="space-y-2">
-                  <label className="text-[10px] font-bold text-slate-400 uppercase ml-1">Categoria</label>
-                  <select required className="w-full p-4 bg-slate-50 border border-slate-100 rounded-2xl outline-none focus:ring-2 focus:ring-indigo-100 transition-all" 
-                    value={categoriaSelecionada} onChange={e => setCategoriaSelecionada(e.target.value)}>
-                    <option value="">...</option>
-                    {categorias.map(cat => (
-                      <option key={cat.id_categoria} value={cat.id_categoria}>{cat.nome_categoria}</option>
-                    ))}
-                  </select>
-                </div>
-              </div>
-              <button className="w-full bg-slate-900 text-white py-5 rounded-2xl font-bold hover:bg-indigo-600 transition-all shadow-lg shadow-slate-200">
-                Registrar
-              </button>
-            </form>
-            {mensagem && <p className="mt-4 text-center text-sm font-bold text-green-600">{mensagem}</p>}
-          </div>
+      {/* ✨ BLURS DE COR (Levemente mais fortes para acompanhar) */}
+      <div className="absolute top-[-20%] left-[-10%] w-[60%] h-[60%] bg-indigo-200/30 rounded-full blur-[120px] -z-10"></div>
+      <div className="absolute bottom-[-10%] right-[-10%] w-[50%] h-[50%] bg-purple-100/30 rounded-full blur-[100px] -z-10"></div>
+      
+      <div className="max-w-3xl space-y-10 z-10">
+        <div className="inline-block bg-white/90 backdrop-blur-md text-indigo-700 px-6 py-2 rounded-full text-[11px] font-black uppercase tracking-widest shadow-md border border-indigo-100">
+          Gerenciamento Inteligente
         </div>
-
-        {/* Histórico */}
-        <div className="lg:col-span-8">
-          <div className="space-y-4">
-            <h3 className="text-lg font-bold text-slate-800 ml-2">Histórico Recente</h3>
-            {transacoes.map((t) => (
-              <div key={t.id_transacao} className="flex justify-between items-center p-6 bg-white border border-slate-100 rounded-[2rem] hover:shadow-md transition-all">
-                <div className="flex items-center gap-5">
-                  <div className="w-12 h-12 bg-indigo-50 text-indigo-600 rounded-2xl flex items-center justify-center text-xl">💸</div>
-                  <div>
-                    <p className="font-bold text-slate-800 text-lg leading-tight">{t.descricao}</p>
-                    <p className="text-[10px] font-bold text-slate-400 uppercase">{t.nome_categoria}</p>
-                  </div>
-                </div>
-                <div className="text-right text-lg font-black text-slate-900">
-                  - R$ {parseFloat(t.valor).toFixed(2)}
-                </div>
-              </div>
-            ))}
-          </div>
+        
+        <h1 className="text-7xl md:text-9xl font-black text-slate-800 tracking-tighter leading-none drop-shadow-sm">
+          Financely<span className="text-indigo-600">.</span>
+        </h1>
+        
+        <p className="text-slate-600 text-xl font-semibold max-w-lg mx-auto leading-relaxed">
+          Simplicidade na gestão, clareza nos resultados.
+          O controle total do seu dinheiro com design minimalista.
+        </p>
+        
+        <div className="flex flex-col md:flex-row gap-5 justify-center pt-4">
+          <Link href="/registrar" className="px-12 py-6 bg-gradient-to-r from-indigo-600 to-purple-600 text-white rounded-[2.5rem] font-bold shadow-2xl shadow-indigo-200 hover:scale-105 transition-all text-lg">
+            Criar conta grátis
+          </Link>
+          <Link href="/login" className="px-12 py-6 bg-white text-slate-700 rounded-[2.5rem] font-bold border-2 border-slate-100 shadow-lg hover:bg-slate-50 transition-all text-lg">
+            Entrar no App
+          </Link>
         </div>
       </div>
     </div>

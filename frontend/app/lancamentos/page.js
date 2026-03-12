@@ -2,62 +2,180 @@
 import { useState, useEffect } from 'react'
 
 export default function Lancamentos() {
+  const [tipo, setTipo] = useState('saida')
+  const [mostrarNovaCat, setMostrarNovaCat] = useState(false)
+  
+  // Estados para capturar os dados do formulário
   const [categorias, setCategorias] = useState([])
-  const [transacoes, setTransacoes] = useState([])
-  const [descricao, setDescricao] = useState('')
   const [valor, setValor] = useState('')
-  const [categoria, setCategoria] = useState('')
+  const [data, setData] = useState(new Date().toISOString().split('T')[0]) // Data de hoje padrão
+  const [idCategoria, setIdCategoria] = useState('')
+  const [novaCategoria, setNovaCategoria] = useState('')
+  const [descricao, setDescricao] = useState('')
 
-  const carregar = async () => {
-    const resCat = await fetch('http://localhost:3000/testar-banco'); setCategorias(await resCat.json())
-    const resTrans = await fetch('http://localhost:3000/listar-transacoes'); setTransacoes(await resTrans.json())
+  // Carrega as categorias do banco ao abrir a página
+  const carregarCategorias = async () => {
+    try {
+      const res = await fetch('http://localhost:3000/testar-banco')
+      const dados = await res.json()
+      setCategorias(dados)
+    } catch (err) {
+      console.error("Erro ao carregar categorias:", err)
+    }
   }
 
-  useEffect(() => { carregar() }, [])
+  useEffect(() => {
+    carregarCategorias()
+  }, [])
 
   const salvar = async (e) => {
     e.preventDefault()
-    await fetch('http://localhost:3000/nova-transacao', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ id_categoria: parseInt(categoria), valor: parseFloat(valor), tipo_movimento: 'Saída', descricao })
-    })
-    setDescricao(''); setValor(''); setCategoria(''); carregar()
+
+    try {
+      let categoriaParaSalvar = idCategoria
+
+      // 1. Se o usuário estiver criando uma nova categoria
+      if (mostrarNovaCat && novaCategoria) {
+        const resCat = await fetch('http://localhost:3000/categorias', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ nome_categoria: novaCategoria })
+        })
+        const novaCatCriada = await resCat.json()
+        categoriaParaSalvar = novaCatCriada.id_categoria
+      }
+
+      // 2. Salva a transação
+      const dadosTransacao = {
+        descricao,
+        valor: parseFloat(valor),
+        id_categoria: parseInt(categoriaParaSalvar),
+        data_transacao: data,
+        tipo // envia 'entrada' ou 'saida'
+      }
+
+      const res = await fetch('http://localhost:3000/nova-transacao', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(dadosTransacao)
+      })
+
+      if (res.ok) {
+        alert("🚀 Lançamento realizado com sucesso!")
+        // Limpa o formulário
+        setDescricao(''); setValor(''); setNovaCategoria('');
+        setMostrarNovaCat(false);
+        carregarCategorias(); // Atualiza a lista caso tenha criado uma nova
+      } else {
+        alert("Erro ao salvar lançamento.")
+      }
+    } catch (err) {
+      console.error("Erro na requisição:", err)
+      alert("Servidor offline ou erro na rede.")
+    }
   }
 
   return (
-    <div className="space-y-10">
-      <h2 className="text-4xl font-black text-slate-800 tracking-tighter italic">Lançamentos.</h2>
-      
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-10">
-        <div className="lg:col-span-4 bg-white p-10 rounded-[3rem] border border-slate-100 shadow-sm">
-          <form onSubmit={salvar} className="space-y-6">
-            <input type="text" placeholder="Descrição" required className="w-full p-5 bg-slate-50 rounded-2xl outline-none" value={descricao} onChange={e => setDescricao(e.target.value)} />
-            <input type="number" step="0.01" placeholder="Valor" required className="w-full p-5 bg-slate-50 rounded-2xl outline-none" value={valor} onChange={e => setValor(e.target.value)} />
-            <select required className="w-full p-5 bg-slate-50 rounded-2xl outline-none" value={categoria} onChange={e => setCategoria(e.target.value)}>
-              <option value="">Selecione a categoria</option>
-              {categorias.map(cat => <option key={cat.id_categoria} value={cat.id_categoria}>{cat.nome_categoria}</option>)}
-            </select>
-            <button className="w-full py-5 bg-slate-900 text-white font-bold rounded-3xl hover:bg-indigo-600 transition-all">Registrar gasto</button>
-          </form>
+    <div className="max-w-2xl mx-auto space-y-8">
+      <div>
+        <h2 className="text-3xl font-bold text-slate-800">Lançamentos</h2>
+        <p className="text-slate-400 text-sm font-medium">Registre suas movimentações financeiras.</p>
+      </div>
+
+      <div className="bg-white p-10 rounded-[2.5rem] border border-slate-100 shadow-xl shadow-slate-200/50 space-y-8">
+        {/* Toggle Entrada/Saída */}
+        <div className="flex bg-slate-50 p-2 rounded-[2rem] border border-slate-100">
+          <button 
+            type="button"
+            onClick={() => setTipo('entrada')}
+            className={`flex-1 py-4 rounded-[1.5rem] font-bold transition-all ${tipo === 'entrada' ? 'bg-emerald-500 text-white shadow-lg' : 'text-slate-400 hover:text-slate-600'}`}
+          >
+            💰 Entrada
+          </button>
+          <button 
+            type="button"
+            onClick={() => setTipo('saida')}
+            className={`flex-1 py-4 rounded-[1.5rem] font-bold transition-all ${tipo === 'saida' ? 'bg-rose-500 text-white shadow-lg' : 'text-slate-400 hover:text-slate-600'}`}
+          >
+            💸 Saída
+          </button>
         </div>
 
-        <div className="lg:col-span-8 bg-white p-10 rounded-[3rem] border border-slate-100">
-          <div className="space-y-4">
-            {transacoes.map((t) => (
-              <div key={t.id_transacao} className="flex justify-between items-center p-5 hover:bg-slate-50 rounded-[2rem] transition-all">
-                <div className="flex items-center gap-5">
-                  <div className="w-10 h-10 bg-indigo-50 text-indigo-600 rounded-xl flex items-center justify-center font-bold text-xs">R$</div>
-                  <div>
-                    <p className="font-bold text-slate-800 text-lg">{t.descricao}</p>
-                    <p className="text-[10px] font-bold text-slate-300 uppercase">{t.nome_categoria}</p>
-                  </div>
-                </div>
-                <div className="font-black text-slate-700">R$ {parseFloat(t.valor).toFixed(2)}</div>
-              </div>
-            ))}
+        <form onSubmit={salvar} className="space-y-6">
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-2">Valor</label>
+              <input 
+                type="number" 
+                step="0.01"
+                required
+                value={valor}
+                onChange={(e) => setValor(e.target.value)}
+                placeholder="0,00" 
+                className="w-full p-5 bg-slate-50 border border-slate-100 rounded-2xl outline-none focus:ring-2 focus:ring-indigo-600/20 transition-all font-bold" 
+              />
+            </div>
+            <div className="space-y-2">
+              <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-2">Data</label>
+              <input 
+                type="date" 
+                required
+                value={data}
+                onChange={(e) => setData(e.target.value)}
+                className="w-full p-5 bg-slate-50 border border-slate-100 rounded-2xl outline-none focus:ring-2 focus:ring-indigo-600/20 transition-all font-bold text-slate-600" 
+              />
+            </div>
           </div>
-        </div>
+
+          <div className="space-y-2">
+            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-2 flex justify-between">
+              Categoria
+              <button type="button" onClick={() => setMostrarNovaCat(!mostrarNovaCat)} className="text-indigo-600 hover:underline">
+                {mostrarNovaCat ? '- Escolher Existente' : '+ Nova Categoria'}
+              </button>
+            </label>
+            
+            {mostrarNovaCat ? (
+              <input 
+                type="text" 
+                value={novaCategoria}
+                onChange={(e) => setNovaCategoria(e.target.value)}
+                placeholder="Nome da nova categoria..." 
+                className="w-full p-5 bg-indigo-50/50 border border-indigo-100 rounded-2xl outline-none focus:ring-2 focus:ring-indigo-600/20 transition-all font-bold" 
+              />
+            ) : (
+              <select 
+                required
+                value={idCategoria}
+                onChange={(e) => setIdCategoria(e.target.value)}
+                className="w-full p-5 bg-slate-50 border border-slate-100 rounded-2xl outline-none focus:ring-2 focus:ring-indigo-600/20 transition-all font-bold text-slate-600 appearance-none"
+              >
+                <option value="">Selecione uma categoria...</option>
+                {categorias.map(cat => (
+                  <option key={cat.id_categoria} value={cat.id_categoria}>
+                    {cat.nome_categoria}
+                  </option>
+                ))}
+              </select>
+            )}
+          </div>
+
+          <div className="space-y-2">
+            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-2">Descrição</label>
+            <input 
+              type="text" 
+              required
+              value={descricao}
+              onChange={(e) => setDescricao(e.target.value)}
+              placeholder="Ex: Compra no mercado..." 
+              className="w-full p-5 bg-slate-50 border border-slate-100 rounded-2xl outline-none focus:ring-2 focus:ring-indigo-600/20 transition-all font-bold" 
+            />
+          </div>
+
+          <button type="submit" className="w-full py-5 bg-indigo-600 text-white rounded-[1.8rem] font-bold text-lg shadow-xl shadow-indigo-200 hover:bg-indigo-700 hover:scale-[1.02] transition-all">
+            Salvar Lançamento
+          </button>
+        </form>
       </div>
     </div>
   )

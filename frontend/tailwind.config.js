@@ -10,4 +10,7 @@ module.exports = {
     extend: {},
   },
   plugins: [],
+  backgroundImage: {
+  'pattern-finance': "url('/financely_app.png')",
+}
 }

@@ -19,7 +19,6 @@ export default function RootLayout({ children }) {
     <html lang="pt-br">
       <body className="bg-[#F8F9FA] min-h-screen flex font-sans antialiased text-slate-900 relative">
         
-        {/* Fundo ultra sutil da Landing Page */}
         {!semSidebar && (
           <div 
             className="fixed inset-0 z-[-1] pointer-events-none opacity-[0.2] grayscale"
@@ -34,7 +33,6 @@ export default function RootLayout({ children }) {
         {!semSidebar && (
           <aside className="w-72 bg-white border-r border-slate-100 hidden md:flex flex-col sticky top-0 h-screen z-10">
             <div className="p-8 mb-4">
-              {/* Logo idêntico à Landing Page: fonte bold e cor indigo-600 */}
               <h1 className="text-2xl font-bold text-[#4f46e5] tracking-tight">
                 Financely<span className="text-indigo-400">.</span>
               </h1>
@@ -51,8 +49,9 @@ export default function RootLayout({ children }) {
                 Lançamentos
               </Link>
 
-              <Link href="/relatorios" className={`flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-semibold transition-all ${pathname === '/lancamentos' ? 'bg-[#4f46e5] text-white shadow-lg shadow-indigo-100' : 'text-slate-400 hover:text-[#4f46e5] hover:bg-slate-50'}`}>
-                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M4 2v20l2-1 2 1 2-1 2 1 2-1 2 1 2-1 2 1V2l-2 1-2-1-2 1-2-1-2 1-2-1-2 1-2-1Z"/><path d="M16 8h-6a2 2 0 1 0 0 4h4a2 2 0 1 1 0 4H8"/><path d="M12 17.5V6.5"/></svg>
+              {/* AJUSTE AQUI: Mudamos a condição para verificar '/relatorios' e trocamos o ícone */}
+              <Link href="/relatorios" className={`flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-semibold transition-all ${pathname === '/relatorios' ? 'bg-[#4f46e5] text-white shadow-lg shadow-indigo-100' : 'text-slate-400 hover:text-[#4f46e5] hover:bg-slate-50'}`}>
+                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M21.21 15.89A10 10 0 1 1 8 2.83"/><path d="M22 12A10 10 0 0 0 12 2v10z"/></svg>
                 Relatórios
               </Link>
               

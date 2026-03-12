@@ -2,59 +2,84 @@
 import { useState, useEffect } from 'react'
 
 export default function Perfil() {
-  const [nome, setNome] = useState('')
-  const [email, setEmail] = useState('')
+  const [usuario, setUsuario] = useState({ nome: '', email: '' })
+  const [estatisticas, setEstatisticas] = useState({ totalTransacoes: 0, saldoAtual: 0 })
 
   useEffect(() => {
-    setNome(localStorage.getItem('usuarioNome') || '')
-    // Aqui você poderia buscar os dados completos do backend se quiser
+    const nomeSalvo = localStorage.getItem('usuarioNome') || 'Usuário'
+    const emailSalvo = localStorage.getItem('usuarioEmail') || 'E-mail não cadastrado'
+    
+    setUsuario({ nome: nomeSalvo, email: emailSalvo })
+
+    const carregarDadosFinanceiros = async () => {
+      try {
+        const res = await fetch('http://localhost:3000/listar-transacoes')
+        const dados = await res.json()
+        const saldo = dados.reduce((acc, t) => acc + parseFloat(t.valor), 0)
+        setEstatisticas({ totalTransacoes: dados.length, saldoAtual: saldo })
+      } catch (err) { console.error("Erro ao carregar dados:", err) }
+    }
+    carregarDadosFinanceiros()
   }, [])
 
-  const atualizarPerfil = async (e) => {
-    e.preventDefault()
-    // Lógica para enviar PUT /usuario/:id no backend
-    alert('Dados salvos (funcionalidade em desenvolvimento!)')
-  }
-
-  const deletarConta = async () => {
-    if (confirm("ATENÇÃO: Isso apagará permanentemente sua conta e todos os seus registros financeiros. Deseja continuar?")) {
-      // Lógica para enviar DELETE /usuario/:id no backend
-      localStorage.clear()
-      window.location.href = '/login'
-    }
-  }
-
   return (
-    <div className="max-w-xl mx-auto space-y-10">
-      <div>
-        <h2 className="text-4xl font-black text-slate-800 tracking-tighter">Ajustes da Conta</h2>
-        <p className="text-slate-400 mt-2 font-medium">Gerencie suas informações pessoais e segurança.</p>
+    <div className="max-w-4xl mx-auto space-y-8">
+      {/* HEADER DINÂMICO */}
+      <div className="relative bg-white rounded-[3rem] p-10 shadow-xl shadow-slate-200/50 border border-slate-100 overflow-hidden">
+        <div className="absolute -top-10 -right-10 w-40 h-40 bg-indigo-50 rounded-full blur-3xl opacity-50" />
+
+        <div className="relative flex flex-col md:flex-row items-center gap-8">
+          <div className="w-32 h-32 bg-indigo-600 rounded-[2.5rem] flex items-center justify-center text-white text-5xl font-black shadow-2xl shadow-indigo-200">
+            {usuario.nome ? usuario.nome.charAt(0).toUpperCase() : 'U'}
+          </div>
+
+          <div className="flex-1 text-center md:text-left space-y-2">
+            <h2 className="text-4xl font-black text-slate-800 tracking-tight">{usuario.nome}</h2>
+            <p className="text-slate-400 font-bold text-sm bg-slate-50 inline-block px-4 py-2 rounded-xl">{usuario.email}</p>
+          </div>
+
+          <button onClick={() => { localStorage.clear(); window.location.href = '/'; }}
+            className="px-8 py-4 bg-red-50 text-red-500 rounded-2xl font-bold hover:bg-red-100 transition-all text-sm">
+            Sair da Conta
+          </button>
+        </div>
       </div>
 
-      <div className="bg-white p-10 rounded-[3rem] border border-slate-100 shadow-sm space-y-8">
-        <form onSubmit={atualizarPerfil} className="space-y-6">
-          <div className="space-y-2">
-            <label className="text-[10px] font-bold text-slate-400 uppercase ml-1">Nome de Exibição</label>
-            <input type="text" className="w-full p-4 bg-slate-50 rounded-2xl border-none outline-none focus:ring-2 focus:ring-indigo-100 transition-all font-bold text-slate-700" 
-              value={nome} onChange={(e) => setNome(e.target.value)} />
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+        {/* INFO DA CONTA */}
+        <div className="bg-white p-8 rounded-[2.5rem] shadow-xl shadow-slate-200/50 border border-slate-100 space-y-6">
+          <h3 className="text-xl font-bold text-slate-800 flex items-center gap-3">
+            <span className="w-2 h-8 bg-indigo-600 rounded-full" /> Dados da Conta
+          </h3>
+          <div className="space-y-4">
+            <div className="flex justify-between items-center p-4 bg-slate-50 rounded-2xl">
+              <span className="text-slate-400 text-[10px] font-black uppercase tracking-widest">Status</span>
+              <span className="text-emerald-500 font-bold flex items-center gap-2">Ativo</span>
+            </div>
+            <div className="flex justify-between items-center p-4 bg-slate-50 rounded-2xl">
+              <span className="text-slate-400 text-[10px] font-black uppercase tracking-widest">Plano</span>
+              <span className="text-slate-800 font-bold">Gratuito</span>
+            </div>
           </div>
-          
-          <div className="space-y-2">
-            <label className="text-[10px] font-bold text-slate-400 uppercase ml-1">E-mail</label>
-            <input type="email" className="w-full p-4 bg-slate-50 rounded-2xl border-none outline-none text-slate-400" 
-              value="email@exemplo.com" disabled />
-            <p className="text-[10px] text-slate-300 ml-1 italic">* O e-mail não pode ser alterado por segurança.</p>
+        </div>
+
+        {/* RESUMO FINANCEIRO */}
+        <div className="bg-white p-8 rounded-[2.5rem] shadow-xl shadow-slate-200/50 border border-slate-100 space-y-6">
+          <h3 className="text-xl font-bold text-slate-800 flex items-center gap-3">
+            <span className="w-2 h-8 bg-emerald-500 rounded-full" /> Atividade no App
+          </h3>
+          <div className="grid grid-cols-2 gap-4">
+            <div className="p-6 bg-slate-50 rounded-3xl text-center">
+              <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Registros</p>
+              <p className="text-2xl font-black text-slate-800">{estatisticas.totalTransacoes}</p>
+            </div>
+            <div className="p-6 bg-slate-50 rounded-3xl text-center">
+              <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Saldo Atual</p>
+              <p className={`text-xl font-black ${estatisticas.saldoAtual >= 0 ? 'text-emerald-500' : 'text-red-500'}`}>
+                R$ {Math.abs(estatisticas.saldoAtual).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+              </p>
+            </div>
           </div>
-
-          <button className="w-full py-5 bg-indigo-600 text-white font-bold rounded-3xl shadow-lg shadow-indigo-100 hover:bg-indigo-700 transition-all">
-            Salvar Alterações
-          </button>
-        </form>
-
-        <div className="pt-6 border-t border-slate-50">
-          <button onClick={deletarConta} className="w-full py-4 text-red-400 font-bold hover:bg-red-50 rounded-2xl transition-all text-sm">
-            Excluir minha conta permanentemente
-          </button>
         </div>
       </div>
     </div>

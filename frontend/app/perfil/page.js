@@ -84,4 +84,4 @@ export default function Perfil() {
       </div>
     </div>
   )
-}
+} 

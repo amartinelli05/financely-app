@@ -70,7 +70,52 @@ app.get('/listar-transacoes', async (req, res) => {
     res.status(500).json({ erro: err.message });
   }
 });
+// Listar metas
+app.get('/listar-metas', async (req, res) => {
+    try {
+        const resultado = await pool.query('SELECT * FROM metas ORDER BY id_meta ASC');
+        res.json(resultado.rows);
+    } catch (err) {
+        res.status(500).json({ erro: err.message });
+    }
+});
 
+app.delete('/deletar-meta/:id', async (req, res) => {
+    const { id } = req.params;
+    try {
+        await pool.query('DELETE FROM metas WHERE id_meta = $1', [id]);
+        res.send('Meta excluída!');
+    } catch (err) {
+        res.status(500).json({ erro: err.message });
+    }
+});
+// Atualizar valor poupado de uma meta
+app.put('/atualizar-meta/:id', async (req, res) => {
+    const { id } = req.params;
+    const { valor_adicional } = req.body;
+    try {
+        await pool.query(
+            'UPDATE metas SET valor_poupado = valor_poupado + $1 WHERE id_meta = $2',
+            [valor_adicional, id]
+        );
+        res.send('Valor atualizado com sucesso!');
+    } catch (err) {
+        res.status(500).json({ erro: err.message });
+    }
+});
+// Criar nova meta
+app.post('/cadastrar-meta', async (req, res) => {
+    const { objetivo, valor_alvo, prazo } = req.body;
+    try {
+        await pool.query(
+            'INSERT INTO metas (objetivo, valor_alvo, prazo) VALUES ($1, $2, $3)',
+            [objetivo, valor_alvo, prazo]
+        );
+        res.status(201).send('Meta criada!');
+    } catch (err) {
+        res.status(500).json({ erro: err.message });
+    }
+});
 // Rota de salvamento ajustada para tratar Entrada/Saída e Data
 app.post('/nova-transacao', async (req, res) => {
   const { id_categoria, valor, descricao, data_transacao, tipo } = req.body;

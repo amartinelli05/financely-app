@@ -20,7 +20,7 @@ const pool = new Pool({
   port: process.env.DB_PORT,
 });
 
-// --- LOGIN E REGISTRO (MANTIDOS) ---
+// --- LOGIN E REGISTRO ---
 app.post('/login', async (req, res) => {
   try {
     const email = req.body.email ? req.body.email.trim() : "";
@@ -34,7 +34,7 @@ app.post('/login', async (req, res) => {
 
     if (senhaCorreta) {
       const token = jwt.sign({ id: usuario.id_usuario }, SECRET_KEY, { expiresIn: '24h' });
-      res.json({ auth: true, token, nome: usuario.nome });
+      res.json({ auth: true, token, nome: usuario.nome, email: usuario.email });
     } else {
       res.status(401).json({ erro: "Senha incorreta." });
     }
@@ -54,12 +54,12 @@ app.post('/registrar', async (req, res) => {
   }
 });
 
-// --- TRANSAÇÕES (ATUALIZADO) ---
+// --- TRANSAÇÕES ---
 
 app.get('/listar-transacoes', async (req, res) => {
   try {
     const query = `
-      SELECT t.id_transacao, t.valor, t.descricao, t.data_transacao as data, t.id_categoria, c.nome_categoria 
+      SELECT t.id_transacao, t.valor, t.descricao, t.data_transacao, t.id_categoria, t.tipo_movimento, c.nome_categoria 
       FROM transacoes t 
       LEFT JOIN categorias c ON t.id_categoria = c.id_categoria
       ORDER BY t.data_transacao DESC
@@ -70,66 +70,22 @@ app.get('/listar-transacoes', async (req, res) => {
     res.status(500).json({ erro: err.message });
   }
 });
-// Listar metas
-app.get('/listar-metas', async (req, res) => {
-    try {
-        const resultado = await pool.query('SELECT * FROM metas ORDER BY id_meta ASC');
-        res.json(resultado.rows);
-    } catch (err) {
-        res.status(500).json({ erro: err.message });
-    }
-});
 
-app.delete('/deletar-meta/:id', async (req, res) => {
-    const { id } = req.params;
-    try {
-        await pool.query('DELETE FROM metas WHERE id_meta = $1', [id]);
-        res.send('Meta excluída!');
-    } catch (err) {
-        res.status(500).json({ erro: err.message });
-    }
-});
-// Atualizar valor poupado de uma meta
-app.put('/atualizar-meta/:id', async (req, res) => {
-    const { id } = req.params;
-    const { valor_adicional } = req.body;
-    try {
-        await pool.query(
-            'UPDATE metas SET valor_poupado = valor_poupado + $1 WHERE id_meta = $2',
-            [valor_adicional, id]
-        );
-        res.send('Valor atualizado com sucesso!');
-    } catch (err) {
-        res.status(500).json({ erro: err.message });
-    }
-});
-// Criar nova meta
-app.post('/cadastrar-meta', async (req, res) => {
-    const { objetivo, valor_alvo, prazo } = req.body;
-    try {
-        await pool.query(
-            'INSERT INTO metas (objetivo, valor_alvo, prazo) VALUES ($1, $2, $3)',
-            [objetivo, valor_alvo, prazo]
-        );
-        res.status(201).send('Meta criada!');
-    } catch (err) {
-        res.status(500).json({ erro: err.message });
-    }
-});
-// Rota de salvamento ajustada para tratar Entrada/Saída e Data
 app.post('/nova-transacao', async (req, res) => {
   const { id_categoria, valor, descricao, data_transacao, tipo } = req.body;
   
-  // Forçamos o tipo a ser exatamente 'entrada' ou 'saida' em minúsculo
-  const tipoFinal = tipo.toLowerCase().trim();
-  const valorFinal = tipoFinal === 'saida' ? -Math.abs(valor) : Math.abs(valor);
+  if (!tipo) return res.status(400).json({ erro: "Tipo de movimentação é obrigatório." });
+
+  // Normaliza o tipo para 'Entrada' ou 'Saída'
+  const tipoFormatado = tipo.toLowerCase().trim() === 'saida' ? 'Saída' : 'Entrada';
+  const valorFinal = tipoFormatado === 'Saída' ? -Math.abs(valor) : Math.abs(valor);
 
   try {
     const query = `
       INSERT INTO transacoes (id_categoria, valor, descricao, data_transacao, tipo_movimento) 
       VALUES ($1, $2, $3, $4, $5) RETURNING *
     `;
-    const result = await pool.query(query, [id_categoria, valorFinal, descricao, data_transacao, tipoFinal]);
+    const result = await pool.query(query, [id_categoria, valorFinal, descricao, data_transacao, tipoFormatado]);
     res.status(201).json(result.rows[0]);
   } catch (err) {
     console.error(err);
@@ -161,9 +117,65 @@ app.delete('/deletar-transacao/:id', async (req, res) => {
   }
 });
 
-// --- CATEGORIAS (NOVO) ---
+// --- METAS ---
 
-// Rota para cadastrar nova categoria direto do app
+app.get('/listar-metas', async (req, res) => {
+  try {
+    const resultado = await pool.query('SELECT * FROM metas ORDER BY id_meta ASC');
+    res.json(resultado.rows);
+  } catch (err) {
+    res.status(500).json({ erro: err.message });
+  }
+});
+
+app.post('/cadastrar-meta', async (req, res) => {
+  const { objetivo, valor_alvo, prazo } = req.body;
+  try {
+    await pool.query(
+      'INSERT INTO metas (objetivo, valor_alvo, prazo) VALUES ($1, $2, $3)',
+      [objetivo, valor_alvo, prazo]
+    );
+    res.status(201).send('Meta criada!');
+  } catch (err) {
+    res.status(500).json({ erro: err.message });
+  }
+});
+
+app.put('/atualizar-meta/:id', async (req, res) => {
+  const { id } = req.params;
+  const { valor_adicional } = req.body;
+  try {
+    await pool.query(
+      'UPDATE metas SET valor_poupado = valor_poupado + $1 WHERE id_meta = $2',
+      [valor_adicional, id]
+    );
+    res.send('Valor atualizado com sucesso!');
+  } catch (err) {
+    res.status(500).json({ erro: err.message });
+  }
+});
+
+app.delete('/deletar-meta/:id', async (req, res) => {
+  const { id } = req.params;
+  try {
+    await pool.query('DELETE FROM metas WHERE id_meta = $1', [id]);
+    res.send('Meta excluída!');
+  } catch (err) {
+    res.status(500).json({ erro: err.message });
+  }
+});
+
+// --- CATEGORIAS ---
+
+app.get('/testar-banco', async (req, res) => {
+  try {
+    const result = await pool.query('SELECT * FROM categorias ORDER BY nome_categoria ASC');
+    res.json(result.rows);
+  } catch (err) {
+    res.status(500).send(err.message);
+  }
+});
+
 app.post('/categorias', async (req, res) => {
   const { nome_categoria } = req.body;
   try {
@@ -177,16 +189,8 @@ app.post('/categorias', async (req, res) => {
   }
 });
 
-app.get('/testar-banco', async (req, res) => {
-  try {
-    const result = await pool.query('SELECT * FROM categorias ORDER BY nome_categoria ASC');
-    res.json(result.rows);
-  } catch (err) {
-    res.status(500).send(err.message);
-  }
-});
+// --- USUÁRIO ---
 
-// --- USUÁRIO (MANTIDO) ---
 app.put('/usuario/:id', async (req, res) => {
   const { id } = req.params;
   const { nome, email } = req.body;
@@ -198,7 +202,17 @@ app.put('/usuario/:id', async (req, res) => {
   }
 });
 
-// Rota para pegar os totais do Dashboard
+app.delete('/usuario/:id', async (req, res) => {
+  const { id } = req.params;
+  try {
+    await pool.query('DELETE FROM usuarios WHERE id_usuario = $1', [id]);
+    res.send("Conta excluída.");
+  } catch (err) {
+    res.status(500).send(err.message);
+  }
+});
+
+// Rota de Totais Geral
 app.get('/totais', async (req, res) => {
   try {
     const query = `
@@ -212,16 +226,6 @@ app.get('/totais', async (req, res) => {
     res.json(result.rows[0]);
   } catch (err) {
     res.status(500).json({ erro: err.message });
-  }
-});
-
-app.delete('/usuario/:id', async (req, res) => {
-  const { id } = req.params;
-  try {
-    await pool.query('DELETE FROM usuarios WHERE id_usuario = $1', [id]);
-    res.send("Conta excluída.");
-  } catch (err) {
-    res.status(500).send(err.message);
   }
 });
 

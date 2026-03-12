@@ -1,122 +1,175 @@
 'use client'
 import { useState, useEffect } from 'react'
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell } from 'recharts'
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell, PieChart, Pie, Legend } from 'recharts'
 
 export default function Dashboard() {
   const [transacoes, setTransacoes] = useState([])
   const [transacoesFiltradas, setTransacoesFiltradas] = useState([])
-  const [periodo, setPeriodo] = useState('tudo') // 'tudo', 'mes', 'semana'
+  const [periodo, setPeriodo] = useState('tudo')
 
   const carregarDados = async () => {
     try {
       const res = await fetch('http://localhost:3000/listar-transacoes')
       const dados = await res.json()
-      setTransacoes(dados)
-      setTransacoesFiltradas(dados)
-    } catch (err) { console.error(err) }
+      const listaValida = Array.isArray(dados) ? dados : []
+      setTransacoes(listaValida)
+      setTransacoesFiltradas(listaValida)
+    } catch (err) { 
+      console.error("Erro ao buscar dados:", err)
+      setTransacoes([])
+    }
   }
 
   useEffect(() => { carregarDados() }, [])
 
-  // Lógica de Filtragem por Período
   useEffect(() => {
     const hoje = new Date()
-    let filtradas = [...transacoes]
+    const mesAtual = hoje.getMonth() // Março é 2
+    const anoAtual = hoje.getFullYear()
 
-    if (periodo === 'mes') {
-      filtradas = transacoes.filter(t => {
-        const dataT = new Date(t.data)
-        return dataT.getMonth() === hoje.getMonth() && dataT.getFullYear() === hoje.getFullYear()
-      })
-    } else if (periodo === 'semana') {
-      const seteDiasAtras = new Date()
-      seteDiasAtras.setDate(hoje.getDate() - 7)
-      filtradas = transacoes.filter(t => new Date(t.data) >= seteDiasAtras)
-    }
+    let filtradas = transacoes.filter(t => {
+      if (!t.data_transacao) return false
+
+      try {
+        // Pega a data pura (YYYY-MM-DD) e ignora o fuso
+        const dataPura = String(t.data_transacao).split('T')[0]
+        const [ano, mes, dia] = dataPura.split('-').map(Number)
+
+        if (periodo === 'mes') {
+          return (mes - 1) === mesAtual && ano === anoAtual
+        } 
+        
+        if (periodo === 'semana') {
+          const dataT = new Date(ano, mes - 1, dia)
+          const seteDiasAtras = new Date()
+          seteDiasAtras.setDate(hoje.getDate() - 7)
+          return dataT >= seteDiasAtras
+        }
+
+        return true // Filtro 'tudo'
+      } catch (e) { return false }
+    })
 
     setTransacoesFiltradas(filtradas)
   }, [periodo, transacoes])
 
-  // Cálculos baseados no filtro atual
-  const resumo = {
-    entradas: transacoesFiltradas.filter(t => parseFloat(t.valor) > 0).reduce((acc, t) => acc + parseFloat(t.valor), 0),
-    saidas: Math.abs(transacoesFiltradas.filter(t => parseFloat(t.valor) < 0).reduce((acc, t) => acc + parseFloat(t.valor), 0)),
-    get saldo() { return this.entradas - this.saidas }
-  }
+  // --- AGRUPAMENTOS PARA OS 4 CARDS ---
 
-  const dadosGrafico = [
-    { name: 'Entradas', valor: resumo.entradas, cor: '#10b981' },
-    { name: 'Saídas', valor: resumo.saidas, cor: '#f43f5e' }
+  const resumoGeral = [
+    { name: 'Entradas', valor: transacoesFiltradas.filter(t => parseFloat(t.valor) > 0).reduce((acc, t) => acc + parseFloat(t.valor || 0), 0), cor: '#4f46e5' },
+    { name: 'Saídas', valor: Math.abs(transacoesFiltradas.filter(t => parseFloat(t.valor) < 0).reduce((acc, t) => acc + parseFloat(t.valor || 0), 0)), cor: '#f43f5e' }
   ]
 
+  const dadosEntradas = () => {
+    const cats = {}
+    transacoesFiltradas.filter(t => parseFloat(t.valor) > 0).forEach(t => {
+      const nome = t.nome_categoria || 'Outros'
+      cats[nome] = (cats[nome] || 0) + parseFloat(t.valor || 0)
+    })
+    return Object.entries(cats).map(([name, value]) => ({ name, value }))
+  }
+
+  const dadosSaidas = () => {
+    const cats = {}
+    transacoesFiltradas.filter(t => parseFloat(t.valor) < 0).forEach(t => {
+      const nome = t.nome_categoria || 'Outros'
+      cats[nome] = (cats[nome] || 0) + Math.abs(parseFloat(t.valor || 0))
+    })
+    return Object.entries(cats).map(([name, value]) => ({ name, value })).sort((a,b) => b.value - a.value)
+  }
+
+  const dadosBalanco = () => {
+    const cats = {}
+    transacoesFiltradas.forEach(t => {
+      const nome = t.nome_categoria || 'Outros'
+      if(!cats[nome]) cats[nome] = { name: nome, entradas: 0, saidas: 0 }
+      if(parseFloat(t.valor) > 0) cats[nome].entradas += parseFloat(t.valor || 0)
+      else cats[nome].saidas += Math.abs(parseFloat(t.valor || 0))
+    })
+    return Object.values(cats)
+  }
+
   return (
-    <div className="space-y-10">
-      {/* HEADER COM FILTROS DE PERÍODO */}
-      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
+    <div className="space-y-8">
+      <div className="bg-white p-8 rounded-[2.5rem] shadow-xl shadow-slate-100/50 border border-slate-50 flex flex-col md:flex-row justify-between items-center gap-6">
         <div>
-          <h2 className="text-4xl font-black text-slate-800 tracking-tight">Dashboard</h2>
-          <p className="text-slate-400 font-medium">Análise de rendimentos e gastos.</p>
+          <h2 className="text-3xl font-black text-slate-800 tracking-tighter uppercase">Financely Dashboard</h2>
+          <p className="text-slate-400 text-[10px] font-black uppercase tracking-[0.2em] mt-1">
+            MOSTRANDO: {transacoesFiltradas.length} REGISTROS
+          </p>
         </div>
-
         <div className="flex bg-slate-100 p-1.5 rounded-2xl gap-1">
-          <button 
-            onClick={() => setPeriodo('tudo')}
-            className={`px-6 py-2.5 rounded-xl text-xs font-black uppercase tracking-widest transition-all ${periodo === 'tudo' ? 'bg-white text-indigo-600 shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}
-          >
-            Tudo
-          </button>
-          <button 
-            onClick={() => setPeriodo('mes')}
-            className={`px-6 py-2.5 rounded-xl text-xs font-black uppercase tracking-widest transition-all ${periodo === 'mes' ? 'bg-white text-indigo-600 shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}
-          >
-            Este Mês
-          </button>
-          <button 
-            onClick={() => setPeriodo('semana')}
-            className={`px-6 py-2.5 rounded-xl text-xs font-black uppercase tracking-widest transition-all ${periodo === 'semana' ? 'bg-white text-indigo-600 shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}
-          >
-            7 Dias
-          </button>
+          {['tudo', 'mes', 'semana'].map((p) => (
+            <button key={p} onClick={() => setPeriodo(p)} className={`px-8 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${periodo === p ? 'bg-white text-indigo-600 shadow-md scale-105' : 'text-slate-400 hover:text-slate-600'}`}>
+              {p === 'semana' ? '7 Dias' : p === 'mes' ? 'Mês' : 'Tudo'}
+            </button>
+          ))}
         </div>
       </div>
 
-      {/* CARDS DE RESUMO */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        <div className="bg-white p-8 rounded-[2.5rem] shadow-xl shadow-slate-200/50 border border-slate-50">
-          <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Saldo no Período</p>
-          <h3 className={`text-3xl font-black ${resumo.saldo >= 0 ? 'text-indigo-600' : 'text-rose-500'}`}>
-            R$ {resumo.saldo.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
-          </h3>
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+        {/* CARD 1: COMPARATIVO ENTRADAS VS SAÍDAS */}
+        <div className="bg-white p-10 rounded-[3rem] shadow-xl shadow-slate-100/50 border border-slate-50">
+          <h3 className="text-xs font-black text-slate-400 uppercase tracking-widest mb-10 flex items-center gap-2"><span className="w-1.5 h-6 bg-indigo-600 rounded-full" /> Volume Total</h3>
+          <div className="h-64">
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={resumoGeral}>
+                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{fill: '#94a3b8', fontWeight: 'bold'}} />
+                <Tooltip cursor={{fill: 'transparent'}} contentStyle={{borderRadius: '20px', border: 'none'}} />
+                <Bar dataKey="valor" radius={[15, 15, 15, 15]} barSize={50}>
+                  {resumoGeral.map((entry, index) => <Cell key={index} fill={entry.cor} />)}
+                </Bar>
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
         </div>
-        <div className="bg-white p-8 rounded-[2.5rem] shadow-xl shadow-slate-200/50 border border-slate-50">
-          <p className="text-[10px] font-black text-emerald-500 uppercase tracking-widest mb-2">Entradas</p>
-          <h3 className="text-3xl font-black text-slate-800">R$ {resumo.entradas.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</h3>
-        </div>
-        <div className="bg-white p-8 rounded-[2.5rem] shadow-xl shadow-slate-200/50 border border-slate-50">
-          <p className="text-[10px] font-black text-rose-500 uppercase tracking-widest mb-2">Saídas</p>
-          <h3 className="text-3xl font-black text-slate-800">R$ {resumo.saidas.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</h3>
-        </div>
-      </div>
 
-      {/* GRÁFICO DINÂMICO */}
-      <div className="bg-white p-10 rounded-[3rem] shadow-xl shadow-slate-200/50 border border-slate-50">
-        <h3 className="text-xl font-bold text-slate-800 mb-8 flex items-center gap-2">
-          <span className="w-2 h-6 bg-indigo-600 rounded-full" /> Comparativo
-        </h3>
-        <div className="h-80 w-full">
-          <ResponsiveContainer width="100%" height="100%">
-            <BarChart data={dadosGrafico}>
-              <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
-              <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fill: '#94a3b8', fontWeight: 'bold', fontSize: 12 }} dy={10} />
-              <YAxis hide />
-              <Tooltip cursor={{ fill: 'transparent' }} contentStyle={{ borderRadius: '20px', border: 'none', boxShadow: '0 10px 15px -3px rgba(0,0,0,0.1)' }} />
-              <Bar dataKey="valor" radius={[15, 15, 15, 15]} barSize={60}>
-                {dadosGrafico.map((entry, index) => (
-                  <Cell key={`cell-${index}`} fill={entry.cor} />
-                ))}
-              </Bar>
-            </BarChart>
-          </ResponsiveContainer>
+        {/* CARD 2: ENTRADAS POR CATEGORIA */}
+        <div className="bg-white p-10 rounded-[3rem] shadow-xl shadow-slate-100/50 border border-slate-50">
+          <h3 className="text-xs font-black text-slate-400 uppercase tracking-widest mb-10 flex items-center gap-2"><span className="w-1.5 h-6 bg-emerald-500 rounded-full" /> Entradas / Categoria</h3>
+          <div className="h-64">
+            <ResponsiveContainer width="100%" height="100%">
+              <PieChart>
+                <Pie data={dadosEntradas()} innerRadius={60} outerRadius={85} paddingAngle={5} dataKey="value">
+                  {dadosEntradas().map((entry, index) => <Cell key={index} fill={['#4f46e5', '#10b981', '#fbbf24', '#f43f5e'][index % 4]} />)}
+                </Pie>
+                <Tooltip />
+                <Legend iconType="circle" />
+              </PieChart>
+            </ResponsiveContainer>
+          </div>
+        </div>
+
+        {/* CARD 3: GASTOS POR CATEGORIA */}
+        <div className="bg-white p-10 rounded-[3rem] shadow-xl shadow-slate-100/50 border border-slate-50">
+          <h3 className="text-xs font-black text-slate-400 uppercase tracking-widest mb-10 flex items-center gap-2"><span className="w-1.5 h-6 bg-rose-500 rounded-full" /> Gastos / Categoria</h3>
+          <div className="h-64">
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={dadosSaidas()} layout="vertical" margin={{ left: 30 }}>
+                <XAxis type="number" hide />
+                <YAxis dataKey="name" type="category" axisLine={false} tickLine={false} tick={{fill: '#64748b', fontSize: 11, fontWeight: 'bold'}} />
+                <Tooltip contentStyle={{borderRadius: '15px', border: 'none'}} />
+                <Bar dataKey="value" fill="#f43f5e" radius={[0, 10, 10, 0]} barSize={25} />
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+        </div>
+
+        {/* CARD 4: BALANÇO POR CATEGORIA */}
+        <div className="bg-white p-10 rounded-[3rem] shadow-xl shadow-slate-100/50 border border-slate-50">
+          <h3 className="text-xs font-black text-slate-400 uppercase tracking-widest mb-10 flex items-center gap-2"><span className="w-1.5 h-6 bg-amber-500 rounded-full" /> Balanço por Categoria</h3>
+          <div className="h-64">
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={dadosBalanco()}>
+                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{fill: '#94a3b8', fontSize: 10, fontWeight: 'bold'}} />
+                <Tooltip contentStyle={{borderRadius: '20px', border: 'none'}} />
+                <Bar dataKey="entradas" fill="#10b981" radius={[8, 8, 0, 0]} barSize={20} />
+                <Bar dataKey="saidas" fill="#f43f5e" radius={[8, 8, 0, 0]} barSize={20} />
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
         </div>
       </div>
     </div>

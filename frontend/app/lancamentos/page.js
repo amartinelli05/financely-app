@@ -5,22 +5,22 @@ export default function Lancamentos() {
   const [tipo, setTipo] = useState('saida')
   const [mostrarNovaCat, setMostrarNovaCat] = useState(false)
   
-  // Estados para capturar os dados do formulário
   const [categorias, setCategorias] = useState([])
   const [valor, setValor] = useState('')
-  const [data, setData] = useState(new Date().toISOString().split('T')[0]) // Data de hoje padrão
+  const [data, setData] = useState(new Date().toISOString().split('T')[0])
   const [idCategoria, setIdCategoria] = useState('')
   const [novaCategoria, setNovaCategoria] = useState('')
   const [descricao, setDescricao] = useState('')
 
-  // Carrega as categorias do banco ao abrir a página
+  // Carrega as categorias (Gerais + Personalizadas do Usuário)
   const carregarCategorias = async () => {
+    const idUsuario = localStorage.getItem('usuarioId');
     try {
-      const res = await fetch('http://localhost:3000/testar-banco')
-      const dados = await res.json()
-      setCategorias(dados)
-    } catch (err) {
-      console.error("Erro ao carregar categorias:", err)
+      const res = await fetch(`http://localhost:3000/listar-categorias?id_usuario=${idUsuario}`);
+      const dados = await res.json();
+      setCategorias(Array.isArray(dados) ? dados : []);
+    } catch (err) { 
+      console.error("Erro ao carregar categorias:", err) 
     }
   }
 
@@ -32,35 +32,43 @@ export default function Lancamentos() {
     e.preventDefault()
 
     try {
+      const idUsuario = localStorage.getItem('usuarioId')
+
+      if (!idUsuario) {
+        alert("Sessão expirada. Por favor, faça login novamente.")
+        return
+      }
+
       let categoriaParaSalvar = idCategoria
 
-      // 1. Se o usuário estiver criando uma nova categoria
+      // 1. Se for uma nova categoria, cria vinculando ao usuário
       if (mostrarNovaCat && novaCategoria) {
         const resCat = await fetch('http://localhost:3000/categorias', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ nome_categoria: novaCategoria })
+          body: JSON.stringify({ 
+            nome_categoria: novaCategoria,
+            id_usuario: parseInt(idUsuario) // Vincula a categoria ao dono
+          })
         })
         const novaCatCriada = await resCat.json()
         categoriaParaSalvar = novaCatCriada.id_categoria
       }
 
-      // Validação básica para evitar erro de banco
-      if (!categoriaParaSalvar) {
-        alert("Por favor, selecione ou crie uma categoria.");
-        return;
+      if (!categoriaParaSalvar && !mostrarNovaCat) {
+        alert("Selecione uma categoria!")
+        return
       }
 
-      // 2. Salva a transação
+      // 2. Monta o objeto da transação COM o id_usuario
       const dadosTransacao = {
         descricao,
         valor: parseFloat(valor),
         id_categoria: parseInt(categoriaParaSalvar),
         data_transacao: data,
-        tipo: tipo.trim() // Garantir que não tenha espaços
+        tipo: tipo,
+        id_usuario: parseInt(idUsuario)
       }
-
-      console.log("Enviando dados:", dadosTransacao); // Debug no console do navegador (F12)
 
       const res = await fetch('http://localhost:3000/nova-transacao', {
         method: 'POST',
@@ -70,28 +78,29 @@ export default function Lancamentos() {
 
       if (res.ok) {
         alert("🚀 Lançamento realizado com sucesso!")
-        setDescricao(''); setValor(''); setNovaCategoria('');
-        setMostrarNovaCat(false);
-        carregarCategorias();
+        setDescricao('')
+        setValor('')
+        setNovaCategoria('')
+        setMostrarNovaCat(false)
+        carregarCategorias()
       } else {
-        const erroTexto = await res.text();
-        console.error("Erro do servidor:", erroTexto);
-        alert("Erro ao salvar lançamento: " + erroTexto);
+        const erroJson = await res.json()
+        alert("Erro ao salvar: " + (erroJson.erro || "Verifique os dados."))
       }
     } catch (err) {
-      console.error("Erro detalhado na requisição:", err)
-      alert("Servidor offline ou erro na rede. Verifique se o terminal do backend está aberto na porta 3000.")
+      console.error("Erro na requisição:", err)
+      alert("Servidor offline ou erro na rede.")
     }
   }
+
   return (
-    <div className="max-w-2xl mx-auto space-y-8">
+    <div className="max-w-2xl mx-auto space-y-8 text-black">
       <div>
-        <h2 className="text-3xl font-bold text-slate-800">Lançamentos</h2>
+        <h2 className="text-3xl font-bold text-slate-800 tracking-tight">Lançamentos</h2>
         <p className="text-slate-400 text-sm font-medium">Registre suas movimentações financeiras.</p>
       </div>
 
       <div className="bg-white p-10 rounded-[2.5rem] border border-slate-100 shadow-xl shadow-slate-200/50 space-y-8">
-        {/* Toggle Entrada/Saída */}
         <div className="flex bg-slate-50 p-2 rounded-[2rem] border border-slate-100">
           <button 
             type="button"
@@ -114,10 +123,7 @@ export default function Lancamentos() {
             <div className="space-y-2">
               <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-2">Valor</label>
               <input 
-                type="number" 
-                step="0.01"
-                required
-                value={valor}
+                type="number" step="0.01" required value={valor}
                 onChange={(e) => setValor(e.target.value)}
                 placeholder="0,00" 
                 className="w-full p-5 bg-slate-50 border border-slate-100 rounded-2xl outline-none focus:ring-2 focus:ring-indigo-600/20 transition-all font-bold" 
@@ -126,9 +132,7 @@ export default function Lancamentos() {
             <div className="space-y-2">
               <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-2">Data</label>
               <input 
-                type="date" 
-                required
-                value={data}
+                type="date" required value={data}
                 onChange={(e) => setData(e.target.value)}
                 className="w-full p-5 bg-slate-50 border border-slate-100 rounded-2xl outline-none focus:ring-2 focus:ring-indigo-600/20 transition-all font-bold text-slate-600" 
               />
@@ -145,16 +149,14 @@ export default function Lancamentos() {
             
             {mostrarNovaCat ? (
               <input 
-                type="text" 
-                value={novaCategoria}
+                type="text" value={novaCategoria}
                 onChange={(e) => setNovaCategoria(e.target.value)}
                 placeholder="Nome da nova categoria..." 
                 className="w-full p-5 bg-indigo-50/50 border border-indigo-100 rounded-2xl outline-none focus:ring-2 focus:ring-indigo-600/20 transition-all font-bold" 
               />
             ) : (
               <select 
-                required
-                value={idCategoria}
+                required value={idCategoria}
                 onChange={(e) => setIdCategoria(e.target.value)}
                 className="w-full p-5 bg-slate-50 border border-slate-100 rounded-2xl outline-none focus:ring-2 focus:ring-indigo-600/20 transition-all font-bold text-slate-600 appearance-none"
               >
@@ -171,9 +173,7 @@ export default function Lancamentos() {
           <div className="space-y-2">
             <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-2">Descrição</label>
             <input 
-              type="text" 
-              required
-              value={descricao}
+              type="text" required value={descricao}
               onChange={(e) => setDescricao(e.target.value)}
               placeholder="Ex: Compra no mercado..." 
               className="w-full p-5 bg-slate-50 border border-slate-100 rounded-2xl outline-none focus:ring-2 focus:ring-indigo-600/20 transition-all font-bold" 

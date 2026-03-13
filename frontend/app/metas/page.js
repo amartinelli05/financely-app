@@ -8,7 +8,11 @@ export default function Metas() {
 
   const carregarMetas = async () => {
     try {
-      const res = await fetch('http://localhost:3000/listar-metas')
+      const idUsuario = localStorage.getItem('usuarioId')
+      if (!idUsuario) return
+
+      // Filtra as metas pelo usuário logado
+      const res = await fetch(`http://localhost:3000/listar-metas?id_usuario=${idUsuario}`)
       const dados = await res.json()
       setMetas(Array.isArray(dados) ? dados : [])
     } catch (err) { console.error("Erro ao carregar metas:", err) }
@@ -18,11 +22,13 @@ export default function Metas() {
 
   const handleSalvar = async (e) => {
     e.preventDefault()
+    const idUsuario = localStorage.getItem('usuarioId')
+
     try {
       await fetch('http://localhost:3000/cadastrar-meta', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(novaMeta)
+        body: JSON.stringify({ ...novaMeta, id_usuario: idUsuario }) // Envia o dono da meta
       })
       setNovaMeta({ objetivo: '', valor_alvo: '', prazo: '' })
       carregarMetas()
@@ -60,7 +66,7 @@ export default function Metas() {
         <p className="text-slate-400 font-medium">Transforme seus sonhos em números.</p>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 text-black">
         {/* FORMULÁRIO */}
         <div className="bg-white p-8 rounded-[3rem] shadow-xl shadow-slate-200/50 border border-slate-50 h-fit">
           <h3 className="text-xl font-bold text-slate-800 mb-6 flex items-center gap-2">
@@ -133,7 +139,6 @@ export default function Metas() {
                     </div>
                   </div>
 
-                  {/* LANÇAMENTO RÁPIDO */}
                   <div className="flex gap-3 w-full md:w-auto bg-slate-50 p-2 rounded-3xl border border-slate-100">
                     <input 
                       type="number" 

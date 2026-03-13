@@ -26,9 +26,12 @@ export default function Login() {
       const data = await res.json()
 
       if (res.ok) {
+        // --- AJUSTES AQUI ---
         localStorage.setItem('token', data.token)
+        localStorage.setItem('usuarioId', data.id_usuario) // Salva o ID único do usuário
         localStorage.setItem('usuarioNome', data.nome)
         localStorage.setItem('usuarioEmail', email.trim()) 
+        
         router.push('/dashboard')
       } else {
         setErro(data.erro || "E-mail ou senha incorretos.")
@@ -55,9 +58,9 @@ export default function Login() {
         </div>
 
         <form onSubmit={handleLogin} className="space-y-5">
-          <input type="email" placeholder="Seu e-mail" required className="w-full p-5 bg-slate-50 rounded-2xl border-none outline-none focus:ring-2 focus:ring-indigo-100 transition-all font-medium"
+          <input type="email" placeholder="Seu e-mail" required className="w-full p-5 bg-slate-50 rounded-2xl border-none outline-none focus:ring-2 focus:ring-indigo-100 transition-all font-medium text-black"
             value={email} onChange={(e) => setEmail(e.target.value)} />
-          <input type="password" placeholder="Sua senha" required className="w-full p-5 bg-slate-50 rounded-2xl border-none outline-none focus:ring-2 focus:ring-indigo-100 transition-all font-medium"
+          <input type="password" placeholder="Sua senha" required className="w-full p-5 bg-slate-50 rounded-2xl border-none outline-none focus:ring-2 focus:ring-indigo-100 transition-all font-medium text-black"
             value={senha} onChange={(e) => setSenha(e.target.value)} />
           {erro && <p className="text-red-500 text-center text-xs font-bold">{erro}</p>}
           <button type="submit" className="w-full py-6 bg-gradient-to-r from-indigo-600 to-purple-600 text-white rounded-[2rem] font-black tracking-widest shadow-xl shadow-indigo-100 hover:scale-[1.02] transition-all uppercase">

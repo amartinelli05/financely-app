@@ -9,8 +9,17 @@ export default function Dashboard() {
 
   const carregarDados = async () => {
     try {
-      const res = await fetch('http://localhost:3000/listar-transacoes')
+      const idUsuario = localStorage.getItem('usuarioId')
+      
+      if (!idUsuario) {
+        console.warn("Usuário não identificado no localStorage")
+        return
+      }
+
+      // Agora filtramos no banco pelo id do usuário logado
+      const res = await fetch(`http://localhost:3000/listar-transacoes?id_usuario=${idUsuario}`)
       const dados = await res.json()
+      
       const listaValida = Array.isArray(dados) ? dados : []
       setTransacoes(listaValida)
       setTransacoesFiltradas(listaValida)
@@ -22,16 +31,16 @@ export default function Dashboard() {
 
   useEffect(() => { carregarDados() }, [])
 
+  // Lógica de Filtro por Período
   useEffect(() => {
     const hoje = new Date()
-    const mesAtual = hoje.getMonth() // Março é 2
+    const mesAtual = hoje.getMonth() 
     const anoAtual = hoje.getFullYear()
 
     let filtradas = transacoes.filter(t => {
       if (!t.data_transacao) return false
 
       try {
-        // Pega a data pura (YYYY-MM-DD) e ignora o fuso
         const dataPura = String(t.data_transacao).split('T')[0]
         const [ano, mes, dia] = dataPura.split('-').map(Number)
 
@@ -46,14 +55,14 @@ export default function Dashboard() {
           return dataT >= seteDiasAtras
         }
 
-        return true // Filtro 'tudo'
+        return true 
       } catch (e) { return false }
     })
 
     setTransacoesFiltradas(filtradas)
   }, [periodo, transacoes])
 
-  // --- AGRUPAMENTOS PARA OS 4 CARDS ---
+  // --- FUNÇÕES DE AGRUPAMENTO PARA OS GRÁFICOS ---
 
   const resumoGeral = [
     { name: 'Entradas', valor: transacoesFiltradas.filter(t => parseFloat(t.valor) > 0).reduce((acc, t) => acc + parseFloat(t.valor || 0), 0), cor: '#4f46e5' },
@@ -91,11 +100,12 @@ export default function Dashboard() {
 
   return (
     <div className="space-y-8">
+      {/* HEADER DO DASHBOARD */}
       <div className="bg-white p-8 rounded-[2.5rem] shadow-xl shadow-slate-100/50 border border-slate-50 flex flex-col md:flex-row justify-between items-center gap-6">
         <div>
           <h2 className="text-3xl font-black text-slate-800 tracking-tighter uppercase">Financely Dashboard</h2>
           <p className="text-slate-400 text-[10px] font-black uppercase tracking-[0.2em] mt-1">
-            MOSTRANDO: {transacoesFiltradas.length} REGISTROS
+            MOSTRANDO: {transacoesFiltradas.length} REGISTROS DO USUÁRIO
           </p>
         </div>
         <div className="flex bg-slate-100 p-1.5 rounded-2xl gap-1">
@@ -108,7 +118,7 @@ export default function Dashboard() {
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-        {/* CARD 1: COMPARATIVO ENTRADAS VS SAÍDAS */}
+        {/* CARD 1: VOLUME TOTAL */}
         <div className="bg-white p-10 rounded-[3rem] shadow-xl shadow-slate-100/50 border border-slate-50">
           <h3 className="text-xs font-black text-slate-400 uppercase tracking-widest mb-10 flex items-center gap-2"><span className="w-1.5 h-6 bg-indigo-600 rounded-full" /> Volume Total</h3>
           <div className="h-64">
@@ -125,7 +135,7 @@ export default function Dashboard() {
           </div>
         </div>
 
-        {/* CARD 2: ENTRADAS POR CATEGORIA */}
+        {/* CARD 2: ENTRADAS / CATEGORIA */}
         <div className="bg-white p-10 rounded-[3rem] shadow-xl shadow-slate-100/50 border border-slate-50">
           <h3 className="text-xs font-black text-slate-400 uppercase tracking-widest mb-10 flex items-center gap-2"><span className="w-1.5 h-6 bg-emerald-500 rounded-full" /> Entradas / Categoria</h3>
           <div className="h-64">
@@ -141,7 +151,7 @@ export default function Dashboard() {
           </div>
         </div>
 
-        {/* CARD 3: GASTOS POR CATEGORIA */}
+        {/* CARD 3: GASTOS / CATEGORIA */}
         <div className="bg-white p-10 rounded-[3rem] shadow-xl shadow-slate-100/50 border border-slate-50">
           <h3 className="text-xs font-black text-slate-400 uppercase tracking-widest mb-10 flex items-center gap-2"><span className="w-1.5 h-6 bg-rose-500 rounded-full" /> Gastos / Categoria</h3>
           <div className="h-64">

@@ -9,31 +9,41 @@ const app = express();
 const port = 3000;
 const SECRET_KEY = process.env.JWT_SECRET || "sua_chave_secreta_aqui";
 
+// Configuração do CORS para permitir a comunicação entre as portas 3001 e 3000
 app.use(cors({
-  origin: '*', // Permite que qualquer porta (3001, 3002...) acesse o backend
+  origin: '*',
   methods: ['GET', 'POST', 'PUT', 'DELETE'],
   allowedHeaders: ['Content-Type', 'Authorization']
 }));
 app.use(express.json());
 
-// --- AJUSTE PARA O NEON (POSTGRES 17) ---
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
-  ssl: {
-    rejectUnauthorized: false // Isso permite a conexão segura com o Neon
-  }
+  ssl: { rejectUnauthorized: false }
 });
 
-// Teste de conexão imediato
-pool.connect((err, client, release) => {
-  if (err) {
-    return console.error('❌ ERRO CRÍTICO NO NEON:', err.stack);
-  }
+// Teste de conexão
+pool.connect((err) => {
+  if (err) return console.error('❌ ERRO NO NEON:', err.stack);
   console.log('✅ CONEXÃO COM POSTGRES (NEON) ESTABELECIDA!');
-  release();
 });
 
-// --- LOGIN E REGISTRO ---
+// --- AUTENTICAÇÃO ---
+
+app.post('/registrar', async (req, res) => {
+  const { nome, email, senha } = req.body;
+  try {
+    const senhaCripto = await bcrypt.hash(senha, 10);
+    await pool.query(
+      'INSERT INTO usuarios (nome, email, senha) VALUES ($1, $2, $3)', 
+      [nome, email.trim(), senhaCripto]
+    );
+    res.status(201).send("Usuário criado!");
+  } catch (err) {
+    res.status(500).send("Erro ao cadastrar: " + err.message);
+  }
+});
+
 app.post('/login', async (req, res) => {
   try {
     const email = req.body.email ? req.body.email.trim() : "";
@@ -47,7 +57,12 @@ app.post('/login', async (req, res) => {
 
     if (senhaCorreta) {
       const token = jwt.sign({ id: usuario.id_usuario }, SECRET_KEY, { expiresIn: '24h' });
-      res.json({ auth: true, token, nome: usuario.nome, email: usuario.email });
+      res.json({ 
+        auth: true, 
+        token, 
+        id_usuario: usuario.id_usuario, 
+        nome: usuario.nome 
+      });
     } else {
       res.status(401).json({ erro: "Senha incorreta." });
     }
@@ -56,36 +71,21 @@ app.post('/login', async (req, res) => {
   }
 });
 
-app.post('/registrar', async (req, res) => {
-  const { nome, email, senha } = req.body;
-  console.log("Tentando registrar usuário:", email); // Isso deve aparecer no seu terminal
-
-  try {
-    const senhaCripto = await bcrypt.hash(senha, 10);
-    const result = await pool.query(
-      'INSERT INTO usuarios (nome, email, senha) VALUES ($1, $2, $3) RETURNING id_usuario', 
-      [nome, email.trim(), senhaCripto]
-    );
-    
-    console.log("✅ Usuário criado com ID:", result.rows[0].id_usuario);
-    res.status(201).send("Usuário criado!");
-  } catch (err) {
-    console.error("❌ ERRO NO INSERT DO NEON:", err.message); // Isso vai dizer o erro real
-    res.status(500).send("Erro ao cadastrar: " + err.message);
-  }
-});
-
-// --- TRANSAÇÕES ---
+// --- TRANSAÇÕES (FILTRADAS) ---
 
 app.get('/listar-transacoes', async (req, res) => {
+  const { id_usuario } = req.query;
+  if (!id_usuario) return res.status(400).json({ erro: "Usuário não identificado." });
+
   try {
     const query = `
-      SELECT t.id_transacao, t.valor, t.descricao, t.data_transacao, t.id_categoria, t.tipo_movimento, c.nome_categoria 
+      SELECT t.*, c.nome_categoria 
       FROM transacoes t 
       LEFT JOIN categorias c ON t.id_categoria = c.id_categoria
+      WHERE t.id_usuario = $1
       ORDER BY t.data_transacao DESC
     `;
-    const result = await pool.query(query);
+    const result = await pool.query(query, [id_usuario]);
     res.json(result.rows);
   } catch (err) {
     res.status(500).json({ erro: err.message });
@@ -93,29 +93,57 @@ app.get('/listar-transacoes', async (req, res) => {
 });
 
 app.post('/nova-transacao', async (req, res) => {
-  console.log("Recebendo nova transação:", req.body);
-  const { id_categoria, valor, descricao, data_transacao, tipo } = req.body;
+  const { id_categoria, valor, descricao, data_transacao, tipo, id_usuario } = req.body;
   
-  if (!tipo) return res.status(400).json({ erro: "Tipo de movimentação é obrigatório." });
+  if (!id_usuario) return res.status(400).json({ erro: "ID do usuário é obrigatório." });
 
   const tipoFormatado = tipo.toLowerCase().trim() === 'saida' ? 'Saída' : 'Entrada';
   const valorFinal = tipoFormatado === 'Saída' ? -Math.abs(valor) : Math.abs(valor);
 
   try {
     const query = `
-      INSERT INTO transacoes (id_categoria, valor, descricao, data_transacao, tipo_movimento) 
-      VALUES ($1, $2, $3, $4, $5) RETURNING *
+      INSERT INTO transacoes (id_categoria, valor, descricao, data_transacao, tipo_movimento, id_usuario) 
+      VALUES ($1, $2, $3, $4, $5, $6) RETURNING *
     `;
-    const result = await pool.query(query, [id_categoria, valorFinal, descricao, data_transacao, tipoFormatado]);
-    console.log("✅ Salvo no banco:", result.rows[0].id_transacao);
+    const result = await pool.query(query, [id_categoria, valorFinal, descricao, data_transacao, tipoFormatado, id_usuario]);
     res.status(201).json(result.rows[0]);
   } catch (err) {
-    console.error("❌ ERRO AO SALVAR:", err.message);
     res.status(500).json({ erro: err.message });
   }
 });
 
-// --- METAS, CATEGORIAS E USUÁRIO ---
+// --- CATEGORIAS ---
+
+// LISTAR CATEGORIAS (Padrão + do Usuário)
+app.get('/listar-categorias', async (req, res) => {
+  const { id_usuario } = req.query;
+  try {
+    // Busca categorias onde o id_usuario é nulo (padrão) OU é o id do usuário logado
+    const result = await pool.query(
+      'SELECT * FROM categorias WHERE id_usuario IS NULL OR id_usuario = $1 ORDER BY nome_categoria ASC', 
+      [id_usuario]
+    );
+    res.json(result.rows);
+  } catch (err) {
+    res.status(500).send(err.message);
+  }
+});
+
+// CRIAR CATEGORIA VINCULADA AO USUÁRIO
+app.post('/categorias', async (req, res) => {
+  const { nome_categoria, id_usuario } = req.body;
+  try {
+    const result = await pool.query(
+      'INSERT INTO categorias (nome_categoria, id_usuario) VALUES ($1, $2) RETURNING id_categoria',
+      [nome_categoria, id_usuario]
+    );
+    res.json(result.rows[0]);
+  } catch (err) {
+    res.status(500).json({ erro: err.message });
+  }
+});
+
+// --- METAS ---
 
 app.get('/listar-metas', async (req, res) => {
   try {
@@ -139,15 +167,6 @@ app.post('/cadastrar-meta', async (req, res) => {
   }
 });
 
-app.get('/testar-banco', async (req, res) => {
-  try {
-    const result = await pool.query('SELECT * FROM categorias ORDER BY nome_categoria ASC');
-    res.json(result.rows);
-  } catch (err) {
-    res.status(500).send(err.message);
-  }
-});
-
 app.listen(port, () => {
-  console.log(`🚀 Financely online em http://localhost:${port}`);
+  console.log(`🚀 Financely online na porta ${port}`);
 });

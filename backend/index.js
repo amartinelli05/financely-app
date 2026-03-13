@@ -12,12 +12,21 @@ const SECRET_KEY = process.env.JWT_SECRET || "sua_chave_secreta_aqui";
 app.use(cors());
 app.use(express.json());
 
+// --- AJUSTE PARA O NEON (POSTGRES 17) ---
 const pool = new Pool({
-  user: process.env.DB_USER,
-  host: process.env.DB_HOST,
-  database: process.env.DB_NAME,
-  password: process.env.DB_PASSWORD,
-  port: process.env.DB_PORT,
+  connectionString: process.env.DATABASE_URL,
+  ssl: {
+    rejectUnauthorized: false // Isso permite a conexão segura com o Neon
+  }
+});
+
+// Teste de conexão imediato
+pool.connect((err, client, release) => {
+  if (err) {
+    return console.error('❌ ERRO CRÍTICO NO NEON:', err.stack);
+  }
+  console.log('✅ CONEXÃO COM POSTGRES (NEON) ESTABELECIDA!');
+  release();
 });
 
 // --- LOGIN E REGISTRO ---
@@ -45,12 +54,20 @@ app.post('/login', async (req, res) => {
 
 app.post('/registrar', async (req, res) => {
   const { nome, email, senha } = req.body;
+  console.log("Tentando registrar usuário:", email); // Isso deve aparecer no seu terminal
+
   try {
     const senhaCripto = await bcrypt.hash(senha, 10);
-    await pool.query('INSERT INTO usuarios (nome, email, senha) VALUES ($1, $2, $3)', [nome, email.trim(), senhaCripto]);
+    const result = await pool.query(
+      'INSERT INTO usuarios (nome, email, senha) VALUES ($1, $2, $3) RETURNING id_usuario', 
+      [nome, email.trim(), senhaCripto]
+    );
+    
+    console.log("✅ Usuário criado com ID:", result.rows[0].id_usuario);
     res.status(201).send("Usuário criado!");
   } catch (err) {
-    res.status(500).send("Erro ao cadastrar.");
+    console.error("❌ ERRO NO INSERT DO NEON:", err.message); // Isso vai dizer o erro real
+    res.status(500).send("Erro ao cadastrar: " + err.message);
   }
 });
 
@@ -72,11 +89,11 @@ app.get('/listar-transacoes', async (req, res) => {
 });
 
 app.post('/nova-transacao', async (req, res) => {
+  console.log("Recebendo nova transação:", req.body);
   const { id_categoria, valor, descricao, data_transacao, tipo } = req.body;
   
   if (!tipo) return res.status(400).json({ erro: "Tipo de movimentação é obrigatório." });
 
-  // Normaliza o tipo para 'Entrada' ou 'Saída'
   const tipoFormatado = tipo.toLowerCase().trim() === 'saida' ? 'Saída' : 'Entrada';
   const valorFinal = tipoFormatado === 'Saída' ? -Math.abs(valor) : Math.abs(valor);
 
@@ -86,38 +103,15 @@ app.post('/nova-transacao', async (req, res) => {
       VALUES ($1, $2, $3, $4, $5) RETURNING *
     `;
     const result = await pool.query(query, [id_categoria, valorFinal, descricao, data_transacao, tipoFormatado]);
+    console.log("✅ Salvo no banco:", result.rows[0].id_transacao);
     res.status(201).json(result.rows[0]);
   } catch (err) {
-    console.error(err);
+    console.error("❌ ERRO AO SALVAR:", err.message);
     res.status(500).json({ erro: err.message });
   }
 });
 
-app.put('/editar-transacao/:id', async (req, res) => {
-  const { id } = req.params;
-  const { descricao, valor, id_categoria, data_transacao } = req.body;
-  try {
-    await pool.query(
-      'UPDATE transacoes SET descricao = $1, valor = $2, id_categoria = $3, data_transacao = $4 WHERE id_transacao = $5',
-      [descricao, valor, id_categoria, data_transacao, id]
-    );
-    res.send('Atualizado!');
-  } catch (err) {
-    res.status(500).send(err.message);
-  }
-});
-
-app.delete('/deletar-transacao/:id', async (req, res) => {
-  const { id } = req.params;
-  try {
-    await pool.query('DELETE FROM transacoes WHERE id_transacao = $1', [id]);
-    res.send('Excluído!');
-  } catch (err) {
-    res.status(500).send(err.message);
-  }
-});
-
-// --- METAS ---
+// --- METAS, CATEGORIAS E USUÁRIO ---
 
 app.get('/listar-metas', async (req, res) => {
   try {
@@ -141,91 +135,12 @@ app.post('/cadastrar-meta', async (req, res) => {
   }
 });
 
-app.put('/atualizar-meta/:id', async (req, res) => {
-  const { id } = req.params;
-  const { valor_adicional } = req.body;
-  try {
-    await pool.query(
-      'UPDATE metas SET valor_poupado = valor_poupado + $1 WHERE id_meta = $2',
-      [valor_adicional, id]
-    );
-    res.send('Valor atualizado com sucesso!');
-  } catch (err) {
-    res.status(500).json({ erro: err.message });
-  }
-});
-
-app.delete('/deletar-meta/:id', async (req, res) => {
-  const { id } = req.params;
-  try {
-    await pool.query('DELETE FROM metas WHERE id_meta = $1', [id]);
-    res.send('Meta excluída!');
-  } catch (err) {
-    res.status(500).json({ erro: err.message });
-  }
-});
-
-// --- CATEGORIAS ---
-
 app.get('/testar-banco', async (req, res) => {
   try {
     const result = await pool.query('SELECT * FROM categorias ORDER BY nome_categoria ASC');
     res.json(result.rows);
   } catch (err) {
     res.status(500).send(err.message);
-  }
-});
-
-app.post('/categorias', async (req, res) => {
-  const { nome_categoria } = req.body;
-  try {
-    const result = await pool.query(
-      'INSERT INTO categorias (nome_categoria) VALUES ($1) RETURNING *',
-      [nome_categoria]
-    );
-    res.status(201).json(result.rows[0]);
-  } catch (err) {
-    res.status(500).json({ erro: err.message });
-  }
-});
-
-// --- USUÁRIO ---
-
-app.put('/usuario/:id', async (req, res) => {
-  const { id } = req.params;
-  const { nome, email } = req.body;
-  try {
-    await pool.query('UPDATE usuarios SET nome = $1, email = $2 WHERE id_usuario = $3', [nome, email, id]);
-    res.send("Perfil atualizado!");
-  } catch (err) {
-    res.status(500).send(err.message);
-  }
-});
-
-app.delete('/usuario/:id', async (req, res) => {
-  const { id } = req.params;
-  try {
-    await pool.query('DELETE FROM usuarios WHERE id_usuario = $1', [id]);
-    res.send("Conta excluída.");
-  } catch (err) {
-    res.status(500).send(err.message);
-  }
-});
-
-// Rota de Totais Geral
-app.get('/totais', async (req, res) => {
-  try {
-    const query = `
-      SELECT 
-        SUM(CASE WHEN valor > 0 THEN valor ELSE 0 END) as entradas,
-        SUM(CASE WHEN valor < 0 THEN ABS(valor) ELSE 0 END) as saidas,
-        SUM(valor) as saldo
-      FROM transacoes
-    `;
-    const result = await pool.query(query);
-    res.json(result.rows[0]);
-  } catch (err) {
-    res.status(500).json({ erro: err.message });
   }
 });
 

@@ -1,11 +1,37 @@
 'use client'
 import { useState } from 'react'
 import Link from 'next/link'
+import { useRouter } from 'next/navigation' // Para redirecionar após o cadastro
 
 export default function Registrar() {
   const [nome, setNome] = useState('')
   const [email, setEmail] = useState('')
   const [senha, setSenha] = useState('')
+  const router = useRouter()
+
+  // --- NOVA FUNÇÃO QUE ENVIA PARA O BACKEND ---
+  const handleRegister = async (e) => {
+    e.preventDefault(); // Impede a página de recarregar
+
+    try {
+      const response = await fetch('http://localhost:3000/registrar', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ nome, email, senha }),
+      });
+
+      if (response.ok) {
+        alert("Conta criada com sucesso! 🚀");
+        router.push('/login'); // Manda você para a tela de login
+      } else {
+        const erro = await response.json();
+        alert("Erro: " + (erro.erro || "Falha ao cadastrar"));
+      }
+    } catch (error) {
+      console.error("Erro na conexão:", error);
+      alert("Não foi possível conectar ao servidor.");
+    }
+  };
 
   return (
     <div className="min-h-screen flex flex-col justify-center items-center p-6 bg-white relative overflow-hidden">
@@ -35,26 +61,33 @@ export default function Registrar() {
           <p className="text-slate-400 font-medium mt-2">Comece sua jornada financeira hoje.</p>
         </div>
 
-        <form className="space-y-5">
+        {/* 🛠️ ADICIONADO O ONSUBMIT AQUI */}
+        <form className="space-y-5" onSubmit={handleRegister}>
           <input 
             type="text" 
+            required
             placeholder="Nome completo" 
-            className="w-full p-5 bg-slate-50 rounded-2xl border-none outline-none focus:ring-2 focus:ring-purple-100 transition-all font-medium"
+            className="w-full p-5 bg-slate-50 rounded-2xl border-none outline-none focus:ring-2 focus:ring-purple-100 transition-all font-medium text-black"
             onChange={(e) => setNome(e.target.value)}
           />
           <input 
             type="email" 
+            required
             placeholder="E-mail" 
-            className="w-full p-5 bg-slate-50 rounded-2xl border-none outline-none focus:ring-2 focus:ring-purple-100 transition-all font-medium"
+            className="w-full p-5 bg-slate-50 rounded-2xl border-none outline-none focus:ring-2 focus:ring-purple-100 transition-all font-medium text-black"
             onChange={(e) => setEmail(e.target.value)}
           />
           <input 
             type="password" 
+            required
             placeholder="Crie uma senha" 
-            className="w-full p-5 bg-slate-50 rounded-2xl border-none outline-none focus:ring-2 focus:ring-purple-100 transition-all font-medium"
+            className="w-full p-5 bg-slate-50 rounded-2xl border-none outline-none focus:ring-2 focus:ring-purple-100 transition-all font-medium text-black"
             onChange={(e) => setSenha(e.target.value)}
           />
-          <button className="w-full py-5 bg-gradient-to-r from-purple-600 to-indigo-600 text-white rounded-[2rem] font-bold shadow-xl shadow-purple-100 hover:scale-[1.02] transition-all">
+          <button 
+            type="submit" 
+            className="w-full py-5 bg-gradient-to-r from-purple-600 to-indigo-600 text-white rounded-[2rem] font-bold shadow-xl shadow-purple-100 hover:scale-[1.02] transition-all"
+          >
             Finalizar Cadastro
           </button>
         </form>

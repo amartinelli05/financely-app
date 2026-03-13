@@ -1,6 +1,10 @@
 {
-  "dependencies": {
-    "jspdf": "^4.2.0",
-    "jspdf-autotable": "^5.0.7"
+  "name": "financely-projeto",
+  "version": "1.0.0",
+  "scripts": {
+    "dev": "concurrently \"cd backend && nodemon index.js\" \"cd frontend && npm run dev\""
+  },
+  "devDependencies": {
+    "concurrently": "^8.2.2"
   }
 }

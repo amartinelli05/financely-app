@@ -9,7 +9,11 @@ const app = express();
 const port = 3000;
 const SECRET_KEY = process.env.JWT_SECRET || "sua_chave_secreta_aqui";
 
-app.use(cors());
+app.use(cors({
+  origin: '*', // Permite que qualquer porta (3001, 3002...) acesse o backend
+  methods: ['GET', 'POST', 'PUT', 'DELETE'],
+  allowedHeaders: ['Content-Type', 'Authorization']
+}));
 app.use(express.json());
 
 // --- AJUSTE PARA O NEON (POSTGRES 17) ---

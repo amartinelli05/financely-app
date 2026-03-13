@@ -45,14 +45,22 @@ export default function Lancamentos() {
         categoriaParaSalvar = novaCatCriada.id_categoria
       }
 
+      // Validação básica para evitar erro de banco
+      if (!categoriaParaSalvar) {
+        alert("Por favor, selecione ou crie uma categoria.");
+        return;
+      }
+
       // 2. Salva a transação
       const dadosTransacao = {
         descricao,
         valor: parseFloat(valor),
         id_categoria: parseInt(categoriaParaSalvar),
         data_transacao: data,
-        tipo // envia 'entrada' ou 'saida'
+        tipo: tipo.trim() // Garantir que não tenha espaços
       }
+
+      console.log("Enviando dados:", dadosTransacao); // Debug no console do navegador (F12)
 
       const res = await fetch('http://localhost:3000/nova-transacao', {
         method: 'POST',
@@ -62,19 +70,19 @@ export default function Lancamentos() {
 
       if (res.ok) {
         alert("🚀 Lançamento realizado com sucesso!")
-        // Limpa o formulário
         setDescricao(''); setValor(''); setNovaCategoria('');
         setMostrarNovaCat(false);
-        carregarCategorias(); // Atualiza a lista caso tenha criado uma nova
+        carregarCategorias();
       } else {
-        alert("Erro ao salvar lançamento.")
+        const erroTexto = await res.text();
+        console.error("Erro do servidor:", erroTexto);
+        alert("Erro ao salvar lançamento: " + erroTexto);
       }
     } catch (err) {
-      console.error("Erro na requisição:", err)
-      alert("Servidor offline ou erro na rede.")
+      console.error("Erro detalhado na requisição:", err)
+      alert("Servidor offline ou erro na rede. Verifique se o terminal do backend está aberto na porta 3000.")
     }
   }
-
   return (
     <div className="max-w-2xl mx-auto space-y-8">
       <div>

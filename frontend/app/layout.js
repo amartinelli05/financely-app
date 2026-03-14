@@ -8,6 +8,7 @@ export default function RootLayout({ children }) {
   const pathname = usePathname()
   const [estaLogado, setEstaLogado] = useState(false)
 
+  // Páginas que não devem mostrar a barra lateral
   const semSidebar = ['/', '/login', '/registrar'].includes(pathname)
 
   useEffect(() => {
@@ -15,10 +16,18 @@ export default function RootLayout({ children }) {
     setEstaLogado(!!token)
   }, [pathname])
 
+  // Função de Logout aprimorada
+  const handleLogout = () => {
+    localStorage.clear();
+    // Força o redirecionamento para a Home e limpa o estado
+    window.location.href = '/'; 
+  }
+
   return (
     <html lang="pt-br">
       <body className="bg-[#F8F9FA] min-h-screen flex font-sans antialiased text-slate-900 relative">
         
+        {/* Fundo com marca d'água */}
         {!semSidebar && (
           <div 
             className="fixed inset-0 z-[-1] pointer-events-none opacity-[0.2] grayscale"
@@ -49,24 +58,24 @@ export default function RootLayout({ children }) {
                 Lançamentos
               </Link>
 
-              {/* AJUSTE AQUI: Mudamos a condição para verificar '/relatorios' e trocamos o ícone */}
               <Link href="/relatorios" className={`flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-semibold transition-all ${pathname === '/relatorios' ? 'bg-[#4f46e5] text-white shadow-lg shadow-indigo-100' : 'text-slate-400 hover:text-[#4f46e5] hover:bg-slate-50'}`}>
                 <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M21.21 15.89A10 10 0 1 1 8 2.83"/><path d="M22 12A10 10 0 0 0 12 2v10z"/></svg>
                 Relatórios
               </Link>
               
+              <Link href="/metas" className={`flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-semibold transition-all ${pathname === '/metas' ? 'bg-[#4f46e5] text-white shadow-lg shadow-indigo-100' : 'text-slate-400 hover:text-[#4f46e5] hover:bg-slate-50'}`}>
+                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg>
+                Metas
+              </Link>
+
               <Link href="/perfil" className={`flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-semibold transition-all ${pathname === '/perfil' ? 'bg-[#4f46e5] text-white shadow-lg shadow-indigo-100' : 'text-slate-400 hover:text-[#4f46e5] hover:bg-slate-50'}`}>
                 <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
                 Meu Perfil
               </Link>
-              <Link href="/metas" className={`flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-semibold transition-all ${pathname === '/metas' ? 'bg-[#4f46e5] text-white' : 'text-slate-400 hover:text-[#4f46e5] hover:bg-slate-50'}`}>
-                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg>
-                Metas
-              </Link>
             </nav>
 
             <div className="p-6 border-t border-slate-50">
-               <button onClick={() => { localStorage.clear(); window.location.href = '/'; }} 
+               <button onClick={handleLogout} 
                  className="flex items-center gap-3 w-full px-4 py-3 text-sm font-bold text-red-500 hover:bg-red-50 rounded-xl transition-all">
                  <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" x2="9" y1="12" y2="12"/></svg>
                  Sair do App

@@ -1,7 +1,10 @@
 'use client'
 import { useState } from 'react'
 import Link from 'next/link'
-import { useRouter } from 'next/navigation' // Para redirecionar após o cadastro
+import { useRouter } from 'next/navigation'
+
+// AJUSTE: URL Dinâmica para Vercel/Local
+const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000';
 
 export default function Registrar() {
   const [nome, setNome] = useState('')
@@ -9,12 +12,12 @@ export default function Registrar() {
   const [senha, setSenha] = useState('')
   const router = useRouter()
 
-  // --- NOVA FUNÇÃO QUE ENVIA PARA O BACKEND ---
   const handleRegister = async (e) => {
-    e.preventDefault(); // Impede a página de recarregar
+    e.preventDefault();
 
     try {
-      const response = await fetch('http://localhost:3000/registrar', {
+      // AJUSTADO: Usando crases e API_URL
+      const response = await fetch(`${API_URL}/registrar`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ nome, email, senha }),
@@ -22,7 +25,7 @@ export default function Registrar() {
 
       if (response.ok) {
         alert("Conta criada com sucesso! 🚀");
-        router.push('/login'); // Manda você para a tela de login
+        router.push('/login');
       } else {
         const erro = await response.json();
         alert("Erro: " + (erro.erro || "Falha ao cadastrar"));
@@ -36,7 +39,6 @@ export default function Registrar() {
   return (
     <div className="min-h-screen flex flex-col justify-center items-center p-6 bg-white relative overflow-hidden">
       
-      {/* 🖼️ FUNDO MARCA D'ÁGUA */}
       <div 
         className="absolute inset-0 z-0 opacity-[0.2] pointer-events-none" 
         style={{ 
@@ -47,11 +49,9 @@ export default function Registrar() {
         }}
       ></div>
 
-      {/* ✨ BLURS DE COR */}
       <div className="absolute bottom-[-10%] left-[-10%] w-[50%] h-[50%] bg-purple-100/40 rounded-full blur-[120px] -z-10"></div>
 
-      {/* ⬅️ BOTÃO VOLTAR */}
-      <Link href="/" className="absolute top-10 left-10 flex items-center gap-2 text-slate-400 hover:text-indigo-600 font-bold transition-all z-20 group">
+      <Link href="/" className="absolute top-10 left-10 flex items-center gap-2 text-slate-400 hover:text-indigo-600 font-bold transition-all z-20 group text-black">
         <span className="text-xl group-hover:-translate-x-1 transition-transform">←</span> Voltar
       </Link>
 
@@ -61,7 +61,6 @@ export default function Registrar() {
           <p className="text-slate-400 font-medium mt-2">Comece sua jornada financeira hoje.</p>
         </div>
 
-        {/* 🛠️ ADICIONADO O ONSUBMIT AQUI */}
         <form className="space-y-5" onSubmit={handleRegister}>
           <input 
             type="text" 
@@ -92,7 +91,7 @@ export default function Registrar() {
           </button>
         </form>
 
-        <p className="text-center mt-8 text-slate-400 font-medium">
+        <p className="text-center mt-8 text-slate-400 font-medium text-black">
           Já possui conta? <Link href="/login" className="text-purple-600 font-black hover:underline">Entrar</Link>
         </p>
       </div>

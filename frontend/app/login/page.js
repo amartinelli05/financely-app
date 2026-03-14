@@ -3,6 +3,9 @@ import { useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 
+// AJUSTE: URL Dinâmica para Vercel/Local
+const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000';
+
 export default function Login() {
   const [email, setEmail] = useState('')
   const [senha, setSenha] = useState('')
@@ -14,7 +17,8 @@ export default function Login() {
     setErro('')
 
     try {
-      const res = await fetch('http://localhost:3000/login', {
+      // AJUSTADO: Usando crases e a variável API_URL
+      const res = await fetch(`${API_URL}/login`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ 
@@ -26,9 +30,8 @@ export default function Login() {
       const data = await res.json()
 
       if (res.ok) {
-        // --- AJUSTES AQUI ---
         localStorage.setItem('token', data.token)
-        localStorage.setItem('usuarioId', data.id_usuario) // Salva o ID único do usuário
+        localStorage.setItem('usuarioId', data.id_usuario)
         localStorage.setItem('usuarioNome', data.nome)
         localStorage.setItem('usuarioEmail', email.trim()) 
         
@@ -68,7 +71,7 @@ export default function Login() {
           </button>
         </form>
 
-        <p className="text-center mt-8 text-slate-400 font-medium">
+        <p className="text-center mt-8 text-slate-400 font-medium text-black">
           Ainda não tem conta? <Link href="/registrar" className="text-indigo-600 font-black hover:underline">Cadastre-se</Link>
         </p>
       </div>

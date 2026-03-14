@@ -2,6 +2,9 @@
 import { useState, useEffect } from 'react'
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell, PieChart, Pie, Legend } from 'recharts'
 
+// Definindo a URL base que muda entre Local e Produção (Render)
+const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000';
+
 export default function Dashboard() {
   const [transacoes, setTransacoes] = useState([])
   const [transacoesFiltradas, setTransacoesFiltradas] = useState([])
@@ -16,8 +19,8 @@ export default function Dashboard() {
         return
       }
 
-      // Agora filtramos no banco pelo id do usuário logado
-      const res = await fetch(`http://localhost:3000/listar-transacoes?id_usuario=${idUsuario}`)
+      // AJUSTADO: Agora usa a variável API_URL e crases ( ` )
+      const res = await fetch(`${API_URL}/listar-transacoes?id_usuario=${idUsuario}`)
       const dados = await res.json()
       
       const listaValida = Array.isArray(dados) ? dados : []
@@ -104,7 +107,7 @@ export default function Dashboard() {
       <div className="bg-white p-8 rounded-[2.5rem] shadow-xl shadow-slate-100/50 border border-slate-50 flex flex-col md:flex-row justify-between items-center gap-6">
         <div>
           <h2 className="text-3xl font-black text-slate-800 tracking-tighter uppercase">Financely Dashboard</h2>
-          <p className="text-slate-400 text-[10px] font-black uppercase tracking-[0.2em] mt-1">
+          <p className="text-slate-400 text-[10px] font-black uppercase tracking-[0.2em] mt-1 text-black">
             MOSTRANDO: {transacoesFiltradas.length} REGISTROS DO USUÁRIO
           </p>
         </div>

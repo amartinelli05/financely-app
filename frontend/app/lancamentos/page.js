@@ -1,6 +1,8 @@
 'use client'
 import { useState, useEffect } from 'react'
 
+const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000';
+
 export default function Lancamentos() {
   const [tipo, setTipo] = useState('saida')
   const [mostrarNovaCat, setMostrarNovaCat] = useState(false)
@@ -12,11 +14,11 @@ export default function Lancamentos() {
   const [novaCategoria, setNovaCategoria] = useState('')
   const [descricao, setDescricao] = useState('')
 
-  // Carrega as categorias (Gerais + Personalizadas do Usuário)
   const carregarCategorias = async () => {
     const idUsuario = localStorage.getItem('usuarioId');
     try {
-      const res = await fetch(`http://localhost:3000/listar-categorias?id_usuario=${idUsuario}`);
+      // AJUSTADO: URL Dinâmica
+      const res = await fetch(`${API_URL}/listar-categorias?id_usuario=${idUsuario}`);
       const dados = await res.json();
       setCategorias(Array.isArray(dados) ? dados : []);
     } catch (err) { 
@@ -41,14 +43,14 @@ export default function Lancamentos() {
 
       let categoriaParaSalvar = idCategoria
 
-      // 1. Se for uma nova categoria, cria vinculando ao usuário
       if (mostrarNovaCat && novaCategoria) {
-        const resCat = await fetch('http://localhost:3000/categorias', {
+        // AJUSTADO: URL Dinâmica
+        const resCat = await fetch(`${API_URL}/categorias`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ 
             nome_categoria: novaCategoria,
-            id_usuario: parseInt(idUsuario) // Vincula a categoria ao dono
+            id_usuario: parseInt(idUsuario)
           })
         })
         const novaCatCriada = await resCat.json()
@@ -60,7 +62,6 @@ export default function Lancamentos() {
         return
       }
 
-      // 2. Monta o objeto da transação COM o id_usuario
       const dadosTransacao = {
         descricao,
         valor: parseFloat(valor),
@@ -70,7 +71,8 @@ export default function Lancamentos() {
         id_usuario: parseInt(idUsuario)
       }
 
-      const res = await fetch('http://localhost:3000/nova-transacao', {
+      // AJUSTADO: URL Dinâmica
+      const res = await fetch(`${API_URL}/nova-transacao`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(dadosTransacao)

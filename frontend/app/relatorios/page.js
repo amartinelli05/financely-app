@@ -1,6 +1,9 @@
 'use client'
 import { useState, useEffect } from 'react'
 
+// AJUSTE: URL Dinâmica para Vercel/Local
+const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000';
+
 export default function Relatorios() {
   const [transacoes, setTransacoes] = useState([])
   const [categorias, setCategorias] = useState([])
@@ -14,12 +17,11 @@ export default function Relatorios() {
       const idUsuario = localStorage.getItem('usuarioId')
       if (!idUsuario) return
 
-      // AJUSTE: Agora enviamos o id_usuario na busca
-      const resT = await fetch(`http://localhost:3000/listar-transacoes?id_usuario=${idUsuario}`)
+      // AJUSTADO: Usando crases e API_URL
+      const resT = await fetch(`${API_URL}/listar-transacoes?id_usuario=${idUsuario}`)
       setTransacoes(await resT.json())
       
-      // AJUSTE: Rota correta de categorias
-      const resC = await fetch('http://localhost:3000/listar-categorias')
+      const resC = await fetch(`${API_URL}/listar-categorias?id_usuario=${idUsuario}`)
       setCategorias(await resC.json())
     } catch (err) { console.error(err) }
   }
@@ -122,7 +124,7 @@ export default function Relatorios() {
 
   const deletar = async (id) => {
     if (confirm("Deseja excluir este lançamento?")) {
-      await fetch(`http://localhost:3000/deletar-transacao/${id}`, { method: 'DELETE' })
+      await fetch(`${API_URL}/deletar-transacao/${id}`, { method: 'DELETE' })
       carregarDados()
     }
   }
@@ -139,7 +141,7 @@ export default function Relatorios() {
 
   const salvarEdicao = async (e) => {
     e.preventDefault()
-    const res = await fetch(`http://localhost:3000/editar-transacao/${editando}`, {
+    const res = await fetch(`${API_URL}/editar-transacao/${editando}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(formEdit)

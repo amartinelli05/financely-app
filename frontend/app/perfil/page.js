@@ -1,6 +1,9 @@
 'use client'
 import { useState, useEffect } from 'react'
 
+// AJUSTE: URL Dinâmica
+const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000';
+
 export default function Perfil() {
   const [usuario, setUsuario] = useState({ nome: '', email: '' })
   const [estatisticas, setEstatisticas] = useState({ totalTransacoes: 0, saldoAtual: 0 })
@@ -8,22 +11,30 @@ export default function Perfil() {
   useEffect(() => {
     const nomeSalvo = localStorage.getItem('usuarioNome') || 'Usuário'
     const emailSalvo = localStorage.getItem('usuarioEmail') || 'E-mail não cadastrado'
+    const idUsuario = localStorage.getItem('usuarioId')
     
     setUsuario({ nome: nomeSalvo, email: emailSalvo })
 
     const carregarDadosFinanceiros = async () => {
+      if (!idUsuario) return
       try {
-        const res = await fetch('http://localhost:3000/listar-transacoes')
+        // AJUSTADO: URL dinâmica e filtro por id_usuario
+        const res = await fetch(`${API_URL}/listar-transacoes?id_usuario=${idUsuario}`)
         const dados = await res.json()
-        const saldo = dados.reduce((acc, t) => acc + parseFloat(t.valor), 0)
-        setEstatisticas({ totalTransacoes: dados.length, saldoAtual: saldo })
-      } catch (err) { console.error("Erro ao carregar dados:", err) }
+        
+        const listaValida = Array.isArray(dados) ? dados : []
+        const saldo = listaValida.reduce((acc, t) => acc + parseFloat(t.valor || 0), 0)
+        
+        setEstatisticas({ totalTransacoes: listaValida.length, saldoAtual: saldo })
+      } catch (err) { 
+        console.error("Erro ao carregar dados:", err) 
+      }
     }
     carregarDadosFinanceiros()
   }, [])
 
   return (
-    <div className="max-w-4xl mx-auto space-y-8">
+    <div className="max-w-4xl mx-auto space-y-8 text-black">
       {/* HEADER DINÂMICO */}
       <div className="relative bg-white rounded-[3rem] p-10 shadow-xl shadow-slate-200/50 border border-slate-100 overflow-hidden">
         <div className="absolute -top-10 -right-10 w-40 h-40 bg-indigo-50 rounded-full blur-3xl opacity-50" />
@@ -58,7 +69,7 @@ export default function Perfil() {
             </div>
             <div className="flex justify-between items-center p-4 bg-slate-50 rounded-2xl">
               <span className="text-slate-400 text-[10px] font-black uppercase tracking-widest">Plano</span>
-              <span className="text-slate-800 font-bold">Gratuito</span>
+              <span className="text-slate-800 font-bold">Estudante</span>
             </div>
           </div>
         </div>
@@ -74,7 +85,7 @@ export default function Perfil() {
               <p className="text-2xl font-black text-slate-800">{estatisticas.totalTransacoes}</p>
             </div>
             <div className="p-6 bg-slate-50 rounded-3xl text-center">
-              <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Saldo Atual</p>
+              <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Saldo Total</p>
               <p className={`text-xl font-black ${estatisticas.saldoAtual >= 0 ? 'text-emerald-500' : 'text-red-500'}`}>
                 R$ {Math.abs(estatisticas.saldoAtual).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
               </p>
@@ -84,4 +95,4 @@ export default function Perfil() {
       </div>
     </div>
   )
-} 
+}

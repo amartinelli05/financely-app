@@ -1,6 +1,9 @@
 'use client'
 import { useState, useEffect } from 'react'
 
+// AJUSTE: URL Dinâmica para Vercel/Local
+const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000';
+
 export default function Metas() {
   const [metas, setMetas] = useState([])
   const [novaMeta, setNovaMeta] = useState({ objetivo: '', valor_alvo: '', prazo: '' })
@@ -11,8 +14,8 @@ export default function Metas() {
       const idUsuario = localStorage.getItem('usuarioId')
       if (!idUsuario) return
 
-      // Filtra as metas pelo usuário logado
-      const res = await fetch(`http://localhost:3000/listar-metas?id_usuario=${idUsuario}`)
+      // AJUSTADO: URL Dinâmica
+      const res = await fetch(`${API_URL}/listar-metas?id_usuario=${idUsuario}`)
       const dados = await res.json()
       setMetas(Array.isArray(dados) ? dados : [])
     } catch (err) { console.error("Erro ao carregar metas:", err) }
@@ -25,10 +28,11 @@ export default function Metas() {
     const idUsuario = localStorage.getItem('usuarioId')
 
     try {
-      await fetch('http://localhost:3000/cadastrar-meta', {
+      // AJUSTADO: URL Dinâmica
+      await fetch(`${API_URL}/cadastrar-meta`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ...novaMeta, id_usuario: idUsuario }) // Envia o dono da meta
+        body: JSON.stringify({ ...novaMeta, id_usuario: idUsuario })
       })
       setNovaMeta({ objetivo: '', valor_alvo: '', prazo: '' })
       carregarMetas()
@@ -40,7 +44,8 @@ export default function Metas() {
     if (!valor || valor <= 0) return
 
     try {
-      await fetch(`http://localhost:3000/atualizar-meta/${id}`, {
+      // AJUSTADO: URL Dinâmica
+      await fetch(`${API_URL}/atualizar-meta/${id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ valor_adicional: parseFloat(valor) })
@@ -53,7 +58,8 @@ export default function Metas() {
   const deletarMeta = async (id) => {
     if (confirm("Deseja excluir este objetivo?")) {
       try {
-        await fetch(`http://localhost:3000/deletar-meta/${id}`, { method: 'DELETE' })
+        // AJUSTADO: URL Dinâmica
+        await fetch(`${API_URL}/deletar-meta/${id}`, { method: 'DELETE' })
         carregarMetas()
       } catch (err) { console.error(err) }
     }
@@ -67,24 +73,23 @@ export default function Metas() {
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 text-black">
-        {/* FORMULÁRIO */}
         <div className="bg-white p-8 rounded-[3rem] shadow-xl shadow-slate-200/50 border border-slate-50 h-fit">
           <h3 className="text-xl font-bold text-slate-800 mb-6 flex items-center gap-2">
             <span className="w-1.5 h-6 bg-indigo-600 rounded-full" /> Criar Meta
           </h3>
           <form onSubmit={handleSalvar} className="space-y-4">
             <div className="space-y-2">
-              <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Objetivo</label>
-              <input type="text" placeholder="Ex: Viagem para Europa" className="w-full p-4 bg-slate-50 rounded-2xl outline-none focus:ring-2 focus:ring-indigo-100 font-semibold" 
+              <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1 text-black">Objetivo</label>
+              <input type="text" placeholder="Ex: Viagem para Europa" className="w-full p-4 bg-slate-50 rounded-2xl outline-none focus:ring-2 focus:ring-indigo-100 font-semibold text-black" 
                 value={novaMeta.objetivo} onChange={e => setNovaMeta({...novaMeta, objetivo: e.target.value})} required />
             </div>
             <div className="space-y-2">
-              <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Valor Alvo</label>
-              <input type="number" placeholder="R$ 0,00" className="w-full p-4 bg-slate-50 rounded-2xl outline-none focus:ring-2 focus:ring-indigo-100 font-semibold" 
+              <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1 text-black">Valor Alvo</label>
+              <input type="number" placeholder="R$ 0,00" className="w-full p-4 bg-slate-50 rounded-2xl outline-none focus:ring-2 focus:ring-indigo-100 font-semibold text-black" 
                 value={novaMeta.valor_alvo} onChange={e => setNovaMeta({...novaMeta, valor_alvo: e.target.value})} required />
             </div>
             <div className="space-y-2">
-              <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Data Final</label>
+              <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1 text-black">Data Final</label>
               <input type="date" className="w-full p-4 bg-slate-50 rounded-2xl outline-none focus:ring-2 focus:ring-indigo-100 font-semibold text-slate-400" 
                 value={novaMeta.prazo} onChange={e => setNovaMeta({...novaMeta, prazo: e.target.value})} required />
             </div>
@@ -94,7 +99,6 @@ export default function Metas() {
           </form>
         </div>
 
-        {/* LISTAGEM */}
         <div className="lg:col-span-2 space-y-6">
           {metas.length === 0 && (
             <div className="bg-slate-50 border-2 border-dashed border-slate-200 rounded-[3rem] p-20 text-center">
@@ -119,7 +123,6 @@ export default function Metas() {
                   </div>
                 </div>
 
-                {/* PROGRESS BAR */}
                 <div className="w-full h-4 bg-slate-100 rounded-full overflow-hidden mb-8 shadow-inner">
                   <div 
                     className="h-full bg-gradient-to-r from-indigo-500 to-emerald-400 transition-all duration-1000 ease-out" 

@@ -172,6 +172,17 @@ app.post('/cadastrar-meta', async (req, res) => {
   }
 });
 
+// ROTA PARA DELETAR META
+app.delete('/deletar-meta/:id', async (req, res) => {
+  const { id } = req.params;
+  try {
+    await pool.query('DELETE FROM metas WHERE id_meta = $1', [id]);
+    res.json({ mensagem: "Meta excluída com sucesso!" });
+  } catch (err) {
+    res.status(500).json({ erro: err.message });
+  }
+});
+
 // ROTA PARA ATUALIZAR O VALOR POUPADO DA META
 app.put('/atualizar-meta/:id', async (req, res) => {
   const { id } = req.params;

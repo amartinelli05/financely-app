@@ -212,6 +212,38 @@ app.put('/atualizar-meta/:id', async (req, res) => {
   }
 });
 
+// Rota para gestão
+// ROTA DE ADMIN COM TRAVA DE SEGURANÇA
+app.get('/admin-stats', async (req, res) => {
+  const { senha } = req.query;
+
+  // Verifica se a senha passada na URL é a correta
+  if (senha !== 'financely-2026') {
+    return res.status(403).json({ 
+      erro: "Acesso negado. Você não tem permissão para visualizar estas estatísticas." 
+    });
+  }
+
+  try {
+    const totalUsuarios = await pool.query('SELECT COUNT(*) FROM usuarios');
+    const totalTransacoes = await pool.query('SELECT COUNT(*) FROM transacoes');
+    const totalMetas = await pool.query('SELECT COUNT(*) FROM metas');
+    const ultimosUsuarios = await pool.query('SELECT nome, email FROM usuarios ORDER BY id_usuario DESC LIMIT 5');
+
+    res.json({
+      status: "Sistema Online",
+      estatisticas: {
+        total_usuarios: parseInt(totalUsuarios.rows[0].count),
+        total_transacoes: parseInt(totalTransacoes.rows[0].count),
+        total_metas: parseInt(totalMetas.rows[0].count)
+      },
+      recentes: ultimosUsuarios.rows
+    });
+  } catch (err) {
+    res.status(500).json({ erro: "Erro ao processar estatísticas de admin." });
+  }
+});
+
 app.listen(port, () => {
   console.log(`🚀 Financely online na porta ${port}`);
 });

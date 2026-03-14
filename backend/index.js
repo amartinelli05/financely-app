@@ -146,8 +146,12 @@ app.post('/categorias', async (req, res) => {
 // --- METAS ---
 
 app.get('/listar-metas', async (req, res) => {
+  const { id_usuario } = req.query; // Pega o id do usuário da URL
   try {
-    const resultado = await pool.query('SELECT * FROM metas ORDER BY id_meta ASC');
+    const resultado = await pool.query(
+      'SELECT * FROM metas WHERE id_usuario = $1 ORDER BY id_meta ASC', 
+      [id_usuario]
+    );
     res.json(resultado.rows);
   } catch (err) {
     res.status(500).json({ erro: err.message });
@@ -155,11 +159,11 @@ app.get('/listar-metas', async (req, res) => {
 });
 
 app.post('/cadastrar-meta', async (req, res) => {
-  const { objetivo, valor_alvo, prazo } = req.body;
+  const { objetivo, valor_alvo, prazo, id_usuario } = req.body; // Recebe o id_usuario
   try {
     await pool.query(
-      'INSERT INTO metas (objetivo, valor_alvo, prazo) VALUES ($1, $2, $3)',
-      [objetivo, valor_alvo, prazo]
+      'INSERT INTO metas (objetivo, valor_alvo, prazo, id_usuario) VALUES ($1, $2, $3, $4)',
+      [objetivo, valor_alvo, prazo, id_usuario]
     );
     res.status(201).send('Meta criada!');
   } catch (err) {

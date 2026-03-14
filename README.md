@@ -24,4 +24,4 @@ O **Financely** é um ecossistema completo para controle financeiro, permitindo 
 - **API (Backend):** [https://financely-app.onrender.com](https://financely-app.onrender.com)
 
 ---
-Desenvolvido por **Amanda Martinelli** para o curso de Sistemas de Informação.
+Desenvolvido por **Amanda Martinelli e Michelli Riffel** para o curso de Sistemas de Informação.

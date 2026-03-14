@@ -8,7 +8,6 @@ export default function RootLayout({ children }) {
   const pathname = usePathname()
   const [estaLogado, setEstaLogado] = useState(false)
 
-  // Páginas que não devem mostrar a barra lateral
   const semSidebar = ['/', '/login', '/registrar'].includes(pathname)
 
   useEffect(() => {
@@ -16,10 +15,8 @@ export default function RootLayout({ children }) {
     setEstaLogado(!!token)
   }, [pathname])
 
-  // Função de Logout aprimorada
   const handleLogout = () => {
     localStorage.clear();
-    // Força o redirecionamento para a Home e limpa o estado
     window.location.href = '/'; 
   }
 
@@ -27,7 +24,6 @@ export default function RootLayout({ children }) {
     <html lang="pt-br">
       <body className="bg-[#F8F9FA] min-h-screen flex font-sans antialiased text-slate-900 relative">
         
-        {/* Fundo com marca d'água */}
         {!semSidebar && (
           <div 
             className="fixed inset-0 z-[-1] pointer-events-none opacity-[0.2] grayscale"
@@ -47,7 +43,7 @@ export default function RootLayout({ children }) {
               </h1>
             </div>
             
-            <nav className="flex-1 px-6 space-y-2">
+            <nav className="flex-1 px-6 space-y-2 flex flex-col">
               <Link href="/dashboard" className={`flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-semibold transition-all ${pathname === '/dashboard' ? 'bg-[#4f46e5] text-white shadow-lg shadow-indigo-100' : 'text-slate-400 hover:text-[#4f46e5] hover:bg-slate-50'}`}>
                 <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><rect width="7" height="9" x="3" y="3" rx="1"/><rect width="7" height="5" x="14" y="3" rx="1"/><rect width="7" height="9" x="14" y="12" rx="1"/><rect width="7" height="5" x="3" y="15" rx="1"/></svg>
                 Dashboard
@@ -72,6 +68,17 @@ export default function RootLayout({ children }) {
                 <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
                 Meu Perfil
               </Link>
+
+              {/* BOTÃO DE FEEDBACK POSICIONADO NO FINAL DA LISTA */}
+              <a 
+                href="https://forms.gle/A9uGyFpScvTkCpfu5" 
+                target="_blank" 
+                rel="noopener noreferrer"
+                className="flex items-center gap-3 px-4 py-3 mt-4 rounded-xl text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 transition-all font-semibold"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/><line x1="9" y1="9" x2="15" y2="9"/><line x1="9" y1="13" x2="15" y2="13"/></svg>
+                Avaliar Sistema
+              </a>
             </nav>
 
             <div className="p-6 border-t border-slate-50">

@@ -8,6 +8,7 @@ export default function RootLayout({ children }) {
   const pathname = usePathname()
   const [estaLogado, setEstaLogado] = useState(false)
 
+  // Páginas que não devem mostrar a barra lateral
   const semSidebar = ['/', '/login', '/registrar'].includes(pathname)
 
   useEffect(() => {
@@ -24,6 +25,7 @@ export default function RootLayout({ children }) {
     <html lang="pt-br">
       <body className="bg-[#F8F9FA] min-h-screen flex font-sans antialiased text-slate-900 relative">
         
+        {/* Fundo com marca d'água */}
         {!semSidebar && (
           <div 
             className="fixed inset-0 z-[-1] pointer-events-none opacity-[0.2] grayscale"
@@ -37,10 +39,20 @@ export default function RootLayout({ children }) {
         
         {!semSidebar && (
           <aside className="w-72 bg-white border-r border-slate-100 hidden md:flex flex-col sticky top-0 h-screen z-10">
+            
+            {/* TÍTULO COM SÍMBOLO DE GRÁFICO */}
             <div className="p-8 mb-4">
-              <h1 className="text-2xl font-bold text-[#4f46e5] tracking-tight">
-                Financely<span className="text-indigo-400">.</span>
-              </h1>
+              <div className="flex items-center gap-3">
+                <div className="p-2.5 bg-indigo-50 rounded-xl text-indigo-600 shadow-sm border border-indigo-100">
+                  <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                    <polyline points="22 7 13.5 15.5 8.5 10.5 2 17"/>
+                    <polyline points="16 7 22 7 22 13"/>
+                  </svg>
+                </div>
+                <h1 className="text-2xl font-black text-[#4f46e5] tracking-tight">
+                  Financely<span className="text-indigo-400">.</span>
+                </h1>
+              </div>
             </div>
             
             <nav className="flex-1 px-6 space-y-2 flex flex-col">
@@ -69,7 +81,7 @@ export default function RootLayout({ children }) {
                 Meu Perfil
               </Link>
 
-              {/* BOTÃO DE FEEDBACK POSICIONADO NO FINAL DA LISTA */}
+              {/* AVALIAR SISTEMA */}
               <a 
                 href="https://forms.gle/A9uGyFpScvTkCpfu5" 
                 target="_blank" 

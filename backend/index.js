@@ -34,13 +34,14 @@ app.post('/registrar', async (req, res) => {
   const { nome, email, senha } = req.body;
   try {
     const senhaCripto = await bcrypt.hash(senha, 10);
-    await pool.query(
-      'INSERT INTO usuarios (nome, email, senha) VALUES ($1, $2, $3)', 
-      [nome, email.trim(), senhaCripto]
+    const result = await pool.query(
+      'INSERT INTO usuarios (nome, email, senha) VALUES ($1, $2, $3) RETURNING id_usuario', 
+      [nome, email.trim().toLowerCase(), senhaCripto]
     );
-    res.status(201).send("Usuário criado!");
+    res.status(201).json({ mensagem: "Usuário criado!", id: result.rows[0].id_usuario });
   } catch (err) {
-    res.status(500).send("Erro ao cadastrar: " + err.message);
+    console.error(err); // Isso vai aparecer no log do Render
+    res.status(500).json({ erro: "Erro no banco de dados: " + err.message });
   }
 });
 

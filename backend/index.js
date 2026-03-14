@@ -175,12 +175,17 @@ app.post('/cadastrar-meta', async (req, res) => {
 // ROTA PARA ATUALIZAR O VALOR POUPADO DA META
 app.put('/atualizar-meta/:id', async (req, res) => {
   const { id } = req.params;
-  const { valor_adicional } = req.body;
+  // Alteração aqui: pega o valor e garante que é um número
+  const valor_adicional = parseFloat(req.body.valor_adicional); 
+
+  if (isNaN(valor_adicional)) {
+    return res.status(400).json({ erro: "Valor inválido" });
+  }
 
   try {
     const query = `
       UPDATE metas 
-      SET valor_poupado = valor_poupado + $1 
+      SET valor_poupado = COALESCE(valor_poupado, 0) + $1 
       WHERE id_meta = $2 
       RETURNING *
     `;

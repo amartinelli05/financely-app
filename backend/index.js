@@ -172,6 +172,30 @@ app.post('/cadastrar-meta', async (req, res) => {
   }
 });
 
+// ROTA PARA ATUALIZAR O VALOR POUPADO DA META
+app.put('/atualizar-meta/:id', async (req, res) => {
+  const { id } = req.params;
+  const { valor_adicional } = req.body;
+
+  try {
+    const query = `
+      UPDATE metas 
+      SET valor_poupado = valor_poupado + $1 
+      WHERE id_meta = $2 
+      RETURNING *
+    `;
+    const result = await pool.query(query, [valor_adicional, id]);
+    
+    if (result.rows.length > 0) {
+      res.json(result.rows[0]);
+    } else {
+      res.status(404).json({ erro: "Meta não encontrada." });
+    }
+  } catch (err) {
+    res.status(500).json({ erro: err.message });
+  }
+});
+
 app.listen(port, () => {
   console.log(`🚀 Financely online na porta ${port}`);
 });

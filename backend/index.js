@@ -210,28 +210,52 @@ app.put('/editar-transacao/:id', async (req, res) => {
 });
 
 // 1. ROTA PARA DELETAR TRANSAÇÃO
-app.delete('/deletar-transacao/:id', async (req, res) => {
-  const { id } = req.params;
-  try {
-    await pool.query('DELETE FROM transacoes WHERE id_transacao = $1', [id]);
-    res.json({ mensagem: "Transação excluída com sucesso!" });
-  } catch (err) {
-    res.status(500).json({ erro: err.message });
+const deletarTransacao = async (id) => {
+  // O pop-up aparece aqui
+  const confirmou = window.confirm("⚠️ Você tem certeza que deseja excluir esta transação? Essa ação não pode ser desfeita.")
+  
+  if (confirmou) {
+    try {
+      const res = await fetch(`${API_URL}/deletar-transacao/${id}`, {
+        method: 'DELETE',
+      })
+      
+      if (res.ok) {
+        // Se deu certo, recarrega a lista para sumir o item da tela
+        carregarDados() 
+        alert("Sucesso! Transação removida.")
+      }
+    } catch (err) {
+      console.error("Erro ao deletar:", err)
+      alert("Houve um erro ao tentar excluir.")
+    }
   }
-});
+}
 
 // 2. ROTA PARA EDITAR TRANSAÇÃO (PUT)
 app.put('/editar-transacao/:id', async (req, res) => {
   const { id } = req.params;
   const { descricao, valor, id_categoria, data_transacao } = req.body;
+  
+  console.log("Tentando editar transação ID:", id, "Dados:", req.body);
+
   try {
-    await pool.query(
-      'UPDATE transacoes SET descricao = $1, valor = $2, id_categoria = $3, data_transacao = $4 WHERE id_transacao = $5',
+    // IMPORTANTE: Verifique se o nome da coluna no seu banco é id_transacao
+    const resultado = await pool.query(
+      `UPDATE transacoes 
+       SET descricao = $1, valor = $2, id_categoria = $3, data_transacao = $4 
+       WHERE id_transacao = $5`,
       [descricao, valor, id_categoria, data_transacao, id]
     );
+
+    if (resultado.rowCount === 0) {
+      return res.status(404).json({ erro: "Transação não encontrada no banco." });
+    }
+
     res.json({ mensagem: "Transação atualizada com sucesso!" });
   } catch (err) {
-    res.status(500).json({ erro: err.message });
+    console.error("ERRO NO BANCO:", err.message);
+    res.status(500).json({ erro: "Erro no servidor: " + err.message });
   }
 });
 

@@ -183,6 +183,58 @@ app.delete('/deletar-meta/:id', async (req, res) => {
   }
 });
 
+// 1. ROTA PARA DELETAR TRANSAÇÃO
+app.delete('/deletar-transacao/:id', async (req, res) => {
+  const { id } = req.params;
+  try {
+    await pool.query('DELETE FROM transacoes WHERE id_transacao = $1', [id]);
+    res.json({ mensagem: "Transação excluída com sucesso!" });
+  } catch (err) {
+    res.status(500).json({ erro: err.message });
+  }
+});
+
+// 2. ROTA PARA EDITAR TRANSAÇÃO (PUT)
+app.put('/editar-transacao/:id', async (req, res) => {
+  const { id } = req.params;
+  const { descricao, valor, id_categoria, data_transacao } = req.body;
+  try {
+    await pool.query(
+      'UPDATE transacoes SET descricao = $1, valor = $2, id_categoria = $3, data_transacao = $4 WHERE id_transacao = $5',
+      [descricao, valor, id_categoria, data_transacao, id]
+    );
+    res.json({ mensagem: "Transação atualizada com sucesso!" });
+  } catch (err) {
+    res.status(500).json({ erro: err.message });
+  }
+});
+
+// 1. ROTA PARA DELETAR TRANSAÇÃO
+app.delete('/deletar-transacao/:id', async (req, res) => {
+  const { id } = req.params;
+  try {
+    await pool.query('DELETE FROM transacoes WHERE id_transacao = $1', [id]);
+    res.json({ mensagem: "Transação excluída com sucesso!" });
+  } catch (err) {
+    res.status(500).json({ erro: err.message });
+  }
+});
+
+// 2. ROTA PARA EDITAR TRANSAÇÃO (PUT)
+app.put('/editar-transacao/:id', async (req, res) => {
+  const { id } = req.params;
+  const { descricao, valor, id_categoria, data_transacao } = req.body;
+  try {
+    await pool.query(
+      'UPDATE transacoes SET descricao = $1, valor = $2, id_categoria = $3, data_transacao = $4 WHERE id_transacao = $5',
+      [descricao, valor, id_categoria, data_transacao, id]
+    );
+    res.json({ mensagem: "Transação atualizada com sucesso!" });
+  } catch (err) {
+    res.status(500).json({ erro: err.message });
+  }
+});
+
 // ROTA PARA ATUALIZAR O VALOR POUPADO DA META
 app.put('/atualizar-meta/:id', async (req, res) => {
   const { id } = req.params;

@@ -122,12 +122,29 @@ export default function Relatorios() {
     link.click()
   }
 
-  const deletar = async (id) => {
-    if (confirm("Deseja excluir este lançamento?")) {
-      await fetch(`${API_URL}/deletar-transacao/${id}`, { method: 'DELETE' })
-      carregarDados()
+ const deletarTransacao = async (id) => {
+  // O pop-up aparece aqui (Isso só funciona no navegador!)
+  const confirmou = window.confirm("⚠️ Você tem certeza que deseja excluir esta transação? Essa ação não pode ser desfeita.");
+  
+  if (confirmou) {
+    try {
+      const res = await fetch(`${API_URL}/deletar-transacao/${id}`, {
+        method: 'DELETE',
+      });
+      
+      if (res.ok) {
+        // Recarrega a lista para sumir o item da tela
+        carregarDados(); 
+        alert("Sucesso! Transação removida.");
+      } else {
+        alert("Erro ao tentar excluir no servidor.");
+      }
+    } catch (err) {
+      console.error("Erro ao deletar:", err);
+      alert("Houve um erro na conexão.");
     }
   }
+};
 
   const iniciarEdicao = (t) => {
     setEditando(t.id_transacao)

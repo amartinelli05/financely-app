@@ -185,27 +185,18 @@ app.delete('/deletar-meta/:id', async (req, res) => {
 
 
 // 1. ROTA PARA DELETAR TRANSAÇÃO
-const deletarTransacao = async (id) => {
-  // O pop-up aparece aqui
-  const confirmou = window.confirm("⚠️ Você tem certeza que deseja excluir esta transação? Essa ação não pode ser desfeita.")
-  
-  if (confirmou) {
-    try {
-      const res = await fetch(`${API_URL}/deletar-transacao/${id}`, {
-        method: 'DELETE',
-      })
-      
-      if (res.ok) {
-        // Se deu certo, recarrega a lista para sumir o item da tela
-        carregarDados() 
-        alert("Sucesso! Transação removida.")
-      }
-    } catch (err) {
-      console.error("Erro ao deletar:", err)
-      alert("Houve um erro ao tentar excluir.")
-    }
+// ROTA PARA DELETAR TRANSAÇÃO (LADO DO SERVIDOR)
+app.delete('/deletar-transacao/:id', async (req, res) => {
+  const { id } = req.params;
+  try {
+    // Executa o comando SQL no PostgreSQL
+    await pool.query('DELETE FROM transacoes WHERE id_transacao = $1', [id]);
+    res.json({ mensagem: "Transação excluída com sucesso!" });
+  } catch (err) {
+    console.error("Erro ao excluir no banco:", err.message);
+    res.status(500).json({ erro: "Erro ao excluir: " + err.message });
   }
-}
+});
 
 // 2. ROTA PARA EDITAR TRANSAÇÃO (PUT)
 app.put('/editar-transacao/:id', async (req, res) => {

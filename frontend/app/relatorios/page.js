@@ -82,141 +82,109 @@ export default function Relatorios() {
   }
 
 const exportarPDF = async () => {
-  // Exibe um feedback visual de carregamento (Opcional, mas recomendado)
-  // p.ex.: setCarregando(true);
-
   try {
-    // 1. Cálculos de Resumo (Igual ao anterior, essencial para o relatório)
-    const totais = transacoesFiltradas.reduce((acc, t) => {
-      const valor = Math.abs(t.valor);
-      if (t.tipo_movimento === 'Entrada') acc.entradas += valor;
-      else acc.saidas += valor;
-      return acc;
-    }, { entradas: 0, saidas: 0 });
-    
-    const saldoFinal = totais.entradas - totais.saidas;
-
-    // 2. Importação Dinâmica
     const { default: jsPDF } = await import('jspdf');
     const { default: autoTable } = await import('jspdf-autotable');
     const doc = new jsPDF();
     
-    // 3. PALETA DE CORES SINCRONIZADA COM O DASHBOARD (Ajustado)
+    // Configurações de Design
     const colors = {
-      // O azul principal do seu menu e botões
-      primary: [84, 86, 230],     
-      // O cinza claro do fundo do dashboard
-      dashboardBg: [248, 250, 252], 
-      // Cinza escuro para texto principal e ícones (lixeira/lápis)
-      textMain: [100, 116, 139],    
-      // Cinza médio para subtítulos e texto secundário
-      textMuted: [148, 163, 184], 
-      // Cores para os valores de Entrada/Saída (mantidas, pois são semânticas)
-      success: [16, 185, 129],    // Verde
-      danger: [239, 68, 68]       // Vermelho
+      primary: [99, 102, 241],   // Indigo Moderno
+      success: [34, 197, 94],    // Verde Esmeralda
+      danger: [239, 68, 68],     // Vermelho Soft
+      slate800: [30, 41, 59],    // Texto Principal
+      slate500: [100, 116, 139], // Texto Secundário
+      slate100: [241, 245, 249], // Fundos/Linhas
     };
 
-    // --- CABEÇALHO ---
-    doc.setFont("helvetica", "bold").setFontSize(26).setTextColor(...colors.primary);
-    doc.text("Financely", 14, 25);
+    // 1. HEADER MINIMALISTA
+    doc.setFillColor(...colors.primary).rect(14, 10, 2, 12, 'F'); // Detalhe vertical lateral
+    doc.setFont("helvetica", "bold").setFontSize(18).setTextColor(...colors.slate800);
+    doc.text("Financely", 20, 19);
     
-    doc.setFont("helvetica", "normal").setFontSize(10).setTextColor(...colors.textMuted);
-    doc.text(`RELATÓRIO DETALHADO DE LANÇAMENTOS`, 14, 34);
-    doc.text(`Emitido em: ${new Date().toLocaleString('pt-BR')}`, 14, 39);
+    doc.setFontSize(8).setTextColor(...colors.slate500).setFont("helvetica", "normal");
+    doc.text("RELATÓRIO DE PERFORMANCE", 20, 24);
+    doc.text(`${new Date().toLocaleDateString('pt-BR')} • ${new Date().toLocaleTimeString('pt-BR', {hour: '2-digit', minute:'2-digit'})}`, 196, 19, { align: 'right' });
 
-    // --- TABELA DE LANÇAMENTOS (Estilo "Clean") ---
-    const colunas = ["Descrição", "Tipo", "Categoria", "Data", "Valor"];
-    const linhas = transacoesFiltradas.map(t => [
-      // Faz o texto da descrição ficar em caixa baixa com a primeira maiúscula,
-      // para um visual mais elegante que tudo em maiúsculas
-      t.descricao.charAt(0).toUpperCase() + t.descricao.slice(1).toLowerCase(),
-      t.tipo_movimento,
-      t.nome_categoria.toUpperCase(),
-      new Date(t.data_transacao).toLocaleDateString('pt-BR'),
-      `R$ ${Math.abs(t.valor).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`
-    ]);
-
+    // 2. TABELA COM ESTILO "INTERFACE"
     autoTable(doc, {
-      startY: 48,
-      head: [colunas],
-      body: linhas,
-      theme: 'plain', // Estilo "clean", mais próximo da estética de cartões da interface
+      startY: 40,
+      head: [["DESCRIÇÃO", "CATEGORIA", "DATA", "VALOR"]],
+      body: transacoesFiltradas.map(t => [
+        t.descricao,
+        t.nome_categoria.toUpperCase(),
+        new Date(t.data_transacao).toLocaleDateString('pt-BR'),
+        `${t.tipo_movimento === 'Entrada' ? '+ ' : '- '} R$ ${Math.abs(t.valor).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`
+      ]),
+      theme: 'plain',
       headStyles: { 
-        fillColor: [255, 255, 255], // Fundo branco no cabeçalho
-        textColor: colors.primary, // Texto azul no cabeçalho
-        fontSize: 10, 
+        fillColor: [255, 255, 255], 
+        textColor: colors.slate500, 
+        fontSize: 7, 
         fontStyle: 'bold',
-        halign: 'center' 
+        cellPadding: { bottom: 4 } 
       },
       styles: { 
         fontSize: 9, 
-        cellPadding: { top: 4, right: 3, bottom: 4, left: 3 }, // Espaçamento maior, como na interface
-        textColor: colors.textMain // Texto cinza escuro para o corpo
+        cellPadding: 6, 
+        textColor: colors.slate800,
+        lineWidth: 0,
       },
-      // Linha separadora sutil abaixo de cada linha do corpo, imitando a lista
+      columnStyles: {
+        1: { cellWidth: 40 },
+        3: { halign: 'right', fontStyle: 'bold' }
+      },
+      // Efeito de Linha Minimalista
       didDrawCell: (data) => {
         if (data.section === 'body') {
-          doc.setDrawColor(226, 232, 240); // Cinza muito claro para a linha
-          doc.setLineWidth(0.1);
+          doc.setDrawColor(...colors.slate100).setLineWidth(0.2);
           doc.line(data.cell.x, data.cell.y + data.cell.height, data.cell.x + data.cell.width, data.cell.y + data.cell.height);
         }
       },
-      columnStyles: { 
-        1: { halign: 'center' },
-        3: { halign: 'center' },
-        4: { halign: 'right', fontStyle: 'bold' } 
-      },
       didParseCell: (data) => {
-        // Cor condicional para o Tipo (Entrada/Saída)
-        if (data.section === 'body' && data.column.index === 1) {
-          data.cell.styles.textColor = data.cell.raw === 'Entrada' ? colors.success : colors.danger;
+        if (data.section === 'body' && data.column.index === 3) {
+          const isEntrada = data.cell.raw.includes('+');
+          data.cell.styles.textColor = isEntrada ? colors.success : colors.danger;
         }
-        // Aplica o cinza escuro do dashboard ao texto da descrição e categoria
-        if (data.section === 'body' && (data.column.index === 0 || data.column.index === 2)) {
-          data.cell.styles.textColor = colors.textMain;
+        // Badge style para Categoria
+        if (data.section === 'body' && data.column.index === 1) {
+          data.cell.styles.fontSize = 7;
+          data.cell.styles.textColor = colors.slate500;
         }
       }
     });
 
-    // --- RODAPÉ DE RESUMO (Estilo "Card") ---
+    // 3. CARD DE RESUMO FLUTUANTE (Design Moderno)
     const finalY = doc.lastAutoTable.finalY + 15;
-    const pageWidth = doc.internal.pageSize.getWidth();
-
-    // Box de Resumo (Simulando um card com fundo claro)
-    doc.setFillColor(...colors.dashboardBg).rect(14, finalY, pageWidth - 28, 25, 'F');
-    doc.setDrawColor(226, 232, 240).rect(14, finalY, pageWidth - 28, 25, 'D'); // Borda sutil
+    const cardWidth = 182;
     
-    doc.setFontSize(11).setTextColor(...colors.primary).setFont("helvetica", "bold");
-    doc.text("Resumo do Período", 18, finalY + 9);
-
-    doc.setFont("helvetica", "normal").setFontSize(10).setTextColor(...colors.textMain);
-    doc.text(`Total Entradas: R$ ${totais.entradas.toLocaleString('pt-BR')}`, 18, finalY + 17);
-    doc.text(`Total Saídas: R$ ${totais.saidas.toLocaleString('pt-BR')}`, 80, finalY + 17);
+    // Sombra/Fundo do Card
+    doc.setFillColor(250, 251, 253).roundedRect(14, finalY, cardWidth, 35, 3, 3, 'F');
     
-    // Saldo com cor condicional
-    const corSaldo = saldoFinal >= 0 ? colors.success : colors.danger;
-    doc.setTextColor(...corSaldo).setFont("helvetica", "bold");
-    doc.text(`SALDO FINAL: R$ ${saldoFinal.toLocaleString('pt-BR')}`, 145, finalY + 17);
+    // Cálculos
+    const entradas = transacoesFiltradas.filter(t => t.tipo_movimento === 'Entrada').reduce((a, b) => a + Math.abs(b.valor), 0);
+    const saidas = transacoesFiltradas.filter(t => t.tipo_movimento === 'Saída').reduce((a, b) => a + Math.abs(b.valor), 0);
+    const total = entradas - saidas;
 
-    // --- NUMERAÇÃO DE PÁGINAS ---
-    const pageCount = doc.internal.getNumberOfPages();
-    for (let i = 1; i <= pageCount; i++) {
-      doc.setPage(i);
-      // Rodapé da página, fora do card de resumo
-      doc.setFontSize(8).setTextColor(...colors.textMuted);
-      doc.text(`Página ${i} de ${pageCount}`, pageWidth - 30, 285);
-      doc.text("financely.com.br", 14, 285); // Uma pequena marca d'água no rodapé
-    }
+    // Conteúdo do Card
+    const drawStat = (label, value, x, color) => {
+      doc.setFontSize(8).setTextColor(...colors.slate500).setFont("helvetica", "normal").text(label, x, finalY + 12);
+      doc.setFontSize(12).setTextColor(...color).setFont("helvetica", "bold").text(value, x, finalY + 22);
+    };
 
-    doc.save(`Financely_Relatorio_${Date.now()}.pdf`);
-  } catch (error) {
+    drawStat("ENTRADAS", `R$ ${entradas.toLocaleString('pt-BR')}`, 25, colors.success);
+    drawStat("SAÍDAS", `R$ ${saidas.toLocaleString('pt-BR')}`, 85, colors.danger);
+    drawStat("SALDO LÍQUIDO", `R$ ${total.toLocaleString('pt-BR')}`, 145, total >= 0 ? colors.primary : colors.danger);
+
+    // Rodapé final
+    doc.setFontSize(7).setTextColor(...colors.slate500).text("Relatório gerado automaticamente pela plataforma Financely. Todos os direitos reservados.", 105, 285, { align: 'center' });
+
+    doc.save(`Financely_Export.pdf`);
+  } catch (error) { 
     console.error(error);
-    alert("Não foi possível gerar o PDF. Verifique os dados.");
-  } finally {
-    // Finaliza o feedback visual de carregamento
-    // p.ex.: setCarregando(false);
+    alert("Erro ao gerar design moderno");
   }
-};
+}
   const exportarCSV = () => {
     const cabecalho = "Descricao;Categoria;Data;Valor;Tipo\n";
     const linhas = transacoesFiltradas.map(t => 

@@ -81,57 +81,102 @@ export default function Relatorios() {
     } catch (err) { alert("Erro na conexão.") }
   }
 
-  // --- EXPORTAÇÃO PDF (COMPLETA) ---
 const exportarPDF = async () => {
-    try {
-      const { default: jsPDF } = await import('jspdf')
-      const { default: autoTable } = await import('jspdf-autotable')
-      const doc = new jsPDF()
-      
-      const indigo = [79, 70, 229];
-      const slate800 = [30, 41, 59];
-      const slate400 = [148, 163, 184];
+  try {
+    // 1. Cálculos de Resumo (Antes de gerar o PDF)
+    const totais = transacoesFiltradas.reduce((acc, t) => {
+      const valor = Math.abs(t.valor);
+      if (t.tipo_movimento === 'Entrada') acc.entradas += valor;
+      else acc.saidas += valor;
+      return acc;
+    }, { entradas: 0, saidas: 0 });
+    
+    const saldoFinal = totais.entradas - totais.saidas;
 
-      // Cabeçalho Premium
-      doc.setFont("helvetica", "bold").setFontSize(26).setTextColor(...indigo);
-      doc.text("Financely", 14, 25);
-      
-      doc.setFont("helvetica", "normal").setFontSize(10).setTextColor(...slate400);
-      doc.text(`RELATÓRIO DE LANÇAMENTOS`, 14, 34);
-      doc.text(`GERADO EM: ${new Date().toLocaleDateString('pt-BR')}`, 14, 39);
+    // 2. Importação Dinâmica
+    const { default: jsPDF } = await import('jspdf');
+    const { default: autoTable } = await import('jspdf-autotable');
+    const doc = new jsPDF();
+    
+    const colors = {
+      primary: [79, 70, 229],    // Indigo
+      success: [16, 185, 129],   // Emerald
+      danger: [239, 68, 68],     // Rose
+      textMain: [30, 41, 59],    // Slate 800
+      textMuted: [100, 116, 139] // Slate 500
+    };
 
-      const colunas = ["Descrição", "Tipo", "Categoria", "Data", "Valor"];
-      const linhas = transacoesFiltradas.map(t => [
-        t.descricao,
-        t.tipo_movimento,
-        t.nome_categoria,
-        new Date(t.data_transacao).toLocaleDateString('pt-BR'),
-        `R$ ${Math.abs(t.valor).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`
-      ]);
+    // --- CABEÇALHO ---
+    doc.setFont("helvetica", "bold").setFontSize(22).setTextColor(...colors.primary);
+    doc.text("Financely", 14, 20);
+    
+    doc.setFont("helvetica", "normal").setFontSize(9).setTextColor(...colors.textMuted);
+    doc.text("RELATÓRIO FINANCEIRO DETALHADO", 14, 27);
+    doc.text(`Emitido em: ${new Date().toLocaleString('pt-BR')}`, 14, 32);
 
-      autoTable(doc, {
-        startY: 48,
-        head: [colunas],
-        body: linhas,
-        theme: 'striped',
-        headStyles: { fillColor: indigo, textColor: [255, 255, 255], fontStyle: 'bold', halign: 'center' },
-        styles: { fontSize: 9, cellPadding: 5, font: "helvetica" },
-        columnStyles: { 4: { halign: 'right', fontStyle: 'bold' } },
-        didParseCell: (data) => {
-          if (data.section === 'body' && data.column.index === 1) {
-            data.cell.styles.textColor = data.cell.raw === 'Entrada' ? [16, 185, 129] : [244, 63, 94];
-          }
+    // --- TABELA DE LANÇAMENTOS ---
+    const colunas = ["Descrição", "Tipo", "Categoria", "Data", "Valor"];
+    const linhas = transacoesFiltradas.map(t => [
+      t.descricao.toUpperCase(),
+      t.tipo_movimento,
+      t.nome_categoria,
+      new Date(t.data_transacao).toLocaleDateString('pt-BR'),
+      `R$ ${Math.abs(t.valor).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`
+    ]);
+
+    autoTable(doc, {
+      startY: 40,
+      head: [colunas],
+      body: linhas,
+      theme: 'grid',
+      headStyles: { fillColor: colors.primary, fontSize: 10, halign: 'center' },
+      styles: { fontSize: 8, cellPadding: 3 },
+      columnStyles: { 
+        1: { halign: 'center' },
+        3: { halign: 'center' },
+        4: { halign: 'right', fontStyle: 'bold' } 
+      },
+      didParseCell: (data) => {
+        if (data.section === 'body' && data.column.index === 1) {
+          const isEntrada = data.cell.raw === 'Entrada';
+          data.cell.styles.textColor = isEntrada ? colors.success : colors.danger;
         }
-      });
+      }
+    });
 
-      // Rodapé com Resumo
-      const finalY = doc.lastAutoTable.finalY + 15;
-      doc.setDrawColor(226, 232, 240).line(14, finalY, 196, finalY);
-      doc.setFontSize(11).setTextColor(...slate800).text("Resumo do Período", 14, finalY + 10);
-      
-      doc.save(`relatorio_financely.pdf`);
-    } catch (error) { alert("Erro PDF") }
+    // --- RODAPÉ DE RESUMO ---
+    const finalY = doc.lastAutoTable.finalY + 15;
+    const pageWidth = doc.internal.pageSize.getWidth();
+
+    // Box de Resumo
+    doc.setDrawColor(226, 232, 240).rect(14, finalY, pageWidth - 28, 25);
+    
+    doc.setFontSize(10).setTextColor(...colors.textMain).setFont("helvetica", "bold");
+    doc.text("RESUMO DO PERÍODO", 18, finalY + 8);
+
+    doc.setFont("helvetica", "normal").setFontSize(9);
+    doc.text(`Total Entradas: R$ ${totais.entradas.toLocaleString('pt-BR')}`, 18, finalY + 16);
+    doc.text(`Total Saídas: R$ ${totais.saidas.toLocaleString('pt-BR')}`, 80, finalY + 16);
+    
+    // Saldo com cor condicional
+    const corSaldo = saldoFinal >= 0 ? colors.success : colors.danger;
+    doc.setTextColor(...corSaldo).setFont("helvetica", "bold");
+    doc.text(`SALDO: R$ ${saldoFinal.toLocaleString('pt-BR')}`, 140, finalY + 16);
+
+    // Numeração de Páginas
+    const pageCount = doc.internal.getNumberOfPages();
+    for (let i = 1; i <= pageCount; i++) {
+      doc.setPage(i);
+      doc.setFontSize(8).setTextColor(...colors.textMuted);
+      doc.text(`Página ${i} de ${pageCount}`, pageWidth - 30, 285);
+    }
+
+    doc.save(`Relatorio_Financely_${Date.now()}.pdf`);
+  } catch (error) {
+    console.error(error);
+    alert("Não foi possível gerar o PDF. Verifique os dados.");
   }
+};
 
   const exportarCSV = () => {
     const cabecalho = "Descricao;Categoria;Data;Valor;Tipo\n";

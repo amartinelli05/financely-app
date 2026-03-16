@@ -183,31 +183,6 @@ app.delete('/deletar-meta/:id', async (req, res) => {
   }
 });
 
-// 1. ROTA PARA DELETAR TRANSAÇÃO
-app.delete('/deletar-transacao/:id', async (req, res) => {
-  const { id } = req.params;
-  try {
-    await pool.query('DELETE FROM transacoes WHERE id_transacao = $1', [id]);
-    res.json({ mensagem: "Transação excluída com sucesso!" });
-  } catch (err) {
-    res.status(500).json({ erro: err.message });
-  }
-});
-
-// 2. ROTA PARA EDITAR TRANSAÇÃO (PUT)
-app.put('/editar-transacao/:id', async (req, res) => {
-  const { id } = req.params;
-  const { descricao, valor, id_categoria, data_transacao } = req.body;
-  try {
-    await pool.query(
-      'UPDATE transacoes SET descricao = $1, valor = $2, id_categoria = $3, data_transacao = $4 WHERE id_transacao = $5',
-      [descricao, valor, id_categoria, data_transacao, id]
-    );
-    res.json({ mensagem: "Transação atualizada com sucesso!" });
-  } catch (err) {
-    res.status(500).json({ erro: err.message });
-  }
-});
 
 // 1. ROTA PARA DELETAR TRANSAÇÃO
 const deletarTransacao = async (id) => {
@@ -235,37 +210,37 @@ const deletarTransacao = async (id) => {
 // 2. ROTA PARA EDITAR TRANSAÇÃO (PUT)
 app.put('/editar-transacao/:id', async (req, res) => {
   const { id } = req.params;
-  // Pegamos os nomes exatamente como costumam vir do formulário
-  const { descricao, valor, id_categoria, data_transacao } = req.body;
+  const { descricao, valor, id_categoria, data_transacao, tipo_movimento } = req.body;
 
   try {
-    // 1. Primeiro, vamos ver se a transação existe e pegar os dados atuais
-    const transacaoAtual = await pool.query('SELECT * FROM transacoes WHERE id_transacao = $1', [id]);
+    // 1. Busca dados atuais para evitar campos nulos
+    const atualRes = await pool.query('SELECT * FROM transacoes WHERE id_transacao = $1', [id]);
     
-    if (transacaoAtual.rows.length === 0) {
+    if (atualRes.rows.length === 0) {
       return res.status(404).json({ erro: "Transação não encontrada." });
     }
 
-    const atual = transacaoAtual.rows[0];
+    const atual = atualRes.rows[0];
 
-    // 2. Usamos o valor novo OU o que já estava no banco (caso venha vazio)
-    const novaDesc = descricao || atual.descricao;
-    const novoValor = valor !== undefined ? valor : atual.valor;
-    const novaCat = id_categoria || atual.id_categoria;
-    const novaData = data_transacao || atual.data_transacao;
+    // 2. Define novos valores ou mantém os atuais (fallback)
+    const v_desc = descricao || atual.descricao;
+    const v_valor = valor !== undefined ? valor : atual.valor;
+    const v_cat = id_categoria || atual.id_categoria;
+    const v_data = data_transacao || atual.data_transacao;
+    const v_tipo = tipo_movimento || atual.tipo_movimento;
 
-    // 3. Executamos o Update
+    // 3. Update respeitando as colunas do seu banco Neon
     await pool.query(
       `UPDATE transacoes 
-       SET descricao = $1, valor = $2, id_categoria = $3, data_transacao = $4 
-       WHERE id_transacao = $5`,
-      [novaDesc, novoValor, novaCat, novaData, id]
+       SET descricao = $1, valor = $2, id_categoria = $3, data_transacao = $4, tipo_movimento = $5
+       WHERE id_transacao = $6`,
+      [v_desc, v_valor, v_cat, v_data, v_tipo, id]
     );
 
     res.json({ mensagem: "Atualizado com sucesso!" });
   } catch (err) {
-    console.error("ERRO NO UPDATE:", err.message);
-    res.status(500).json({ erro: "Erro ao salvar no banco: " + err.message });
+    console.error("ERRO NO BANCO:", err.message);
+    res.status(500).json({ erro: "Erro ao salvar: " + err.message });
   }
 });
 

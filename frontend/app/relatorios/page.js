@@ -82,37 +82,57 @@ export default function Relatorios() {
   }
 
   // --- EXPORTAÇÃO PDF (COMPLETA) ---
-  const exportarPDF = async () => {
-    try {
-      const { default: jsPDF } = await import('jspdf')
-      const { default: autoTable } = await import('jspdf-autotable')
-      const doc = new jsPDF()
-      
-      doc.setFontSize(20);
-      doc.text("Relatório Financely", 14, 20);
-      doc.setFontSize(10);
-      doc.text(`Gerado em: ${new Date().toLocaleDateString()}`, 14, 28);
+const exportarPDF = async () => {
+  try {
+    const { default: jsPDF } = await import('jspdf');
+    const { default: autoTable } = await import('jspdf-autotable');
+    const doc = new jsPDF();
+    
+    // Cores do Design System
+    const indigo = [79, 70, 229];
+    const slate800 = [30, 41, 59];
+    const slate400 = [148, 163, 184];
 
-      const colunas = ["Descrição", "Tipo", "Categoria", "Data", "Valor"];
-      const linhas = transacoesFiltradas.map(t => [
-        t.descricao,
-        t.tipo_movimento,
-        t.nome_categoria,
-        new Date(t.data_transacao).toLocaleDateString('pt-BR'),
-        `R$ ${Math.abs(t.valor).toFixed(2)}`
-      ])
+    // Cabeçalho Moderno
+    doc.setFont("helvetica", "bold").setFontSize(22).setTextColor(...indigo);
+    doc.text("Financely", 14, 22);
+    
+    doc.setFont("helvetica", "normal").setFontSize(10).setTextColor(...slate400);
+    doc.text(`Relatório de ${localStorage.getItem('usuarioNome') || 'Lançamentos'}`, 14, 30);
+    doc.text(`Gerado em: ${new Date().toLocaleDateString('pt-BR')}`, 14, 35);
 
-      autoTable(doc, {
-        startY: 35,
-        head: [colunas],
-        body: linhas,
-        headStyles: { fillColor: [79, 70, 229] }
-      })
+    const colunas = ["Descrição", "Tipo", "Categoria", "Data", "Valor"];
+    const linhas = transacoesFiltradas.map(t => [
+      t.descricao,
+      t.tipo_movimento,
+      t.nome_categoria,
+      new Date(t.data_transacao).toLocaleDateString('pt-BR'),
+      `R$ ${Math.abs(t.valor).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`
+    ]);
 
-      doc.save(`relatorio_financely.pdf`)
-    } catch (error) { alert("Erro ao gerar PDF") }
+    autoTable(doc, {
+      startY: 45,
+      head: [colunas],
+      body: linhas,
+      theme: 'grid',
+      headStyles: { fillColor: indigo, textColor: [255, 255, 255], fontStyle: 'bold' },
+      styles: { fontSize: 9, cellPadding: 4 },
+      columnStyles: {
+        4: { halign: 'right', fontStyle: 'bold' } // Valor alinhado à direita
+      },
+      didParseCell: (data) => {
+        if (data.section === 'body' && data.column.index === 1) {
+          // Cor baseada no tipo: Verde para Entrada, Vermelho para Saída
+          data.cell.styles.textColor = data.cell.raw === 'Entrada' ? [16, 185, 129] : [244, 63, 94];
+        }
+      }
+    });
+
+    doc.save(`relatorio_financely.pdf`);
+  } catch (error) {
+    alert("Erro ao gerar o PDF moderno.");
   }
-
+};
   const exportarCSV = () => {
     const cabecalho = "Descricao;Categoria;Data;Valor;Tipo\n";
     const linhas = transacoesFiltradas.map(t => 
@@ -177,11 +197,30 @@ export default function Relatorios() {
                   R$ {Math.abs(t.valor).toFixed(2)}
                 </td>
                 <td className="p-6 text-center">
-                  <div className="flex justify-center gap-4 opacity-0 group-hover:opacity-100 transition-all">
-                    <button onClick={() => iniciarEdicao(t)} className="text-indigo-600 font-bold text-xs hover:underline">Editar</button>
-                    <button onClick={() => deletarTransacao(t.id_transacao)} className="text-red-500 font-bold text-xs hover:underline">Excluir</button>
-                  </div>
-                </td>
+                     <div className="flex justify-center gap-2 opacity-0 group-hover:opacity-100 transition-all">
+    {/* BOTÃO EDITAR (LÁPIS) */}
+    <button 
+      onClick={() => iniciarEdicao(t)} 
+      className="p-2 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-all"
+      title="Editar"
+    >
+      <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/><path d="m15 5 4 4"/>
+      </svg>
+    </button>
+
+    {/* BOTÃO EXCLUIR (LIXEIRA) */}
+    <button 
+      onClick={() => deletarTransacao(t.id_transacao)} 
+      className="p-2 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-all"
+      title="Excluir"
+    >
+      <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/><line x1="10" x2="10" y1="11" y2="17"/><line x1="14" x2="14" y1="11" y2="17"/>
+      </svg>
+    </button>
+  </div>
+</td>
               </tr>
             ))}
           </tbody>

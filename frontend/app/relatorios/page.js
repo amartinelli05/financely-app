@@ -196,26 +196,24 @@ const exportarPDF = async () => {
                 <td className={`p-6 text-right font-bold ${t.valor >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
                   R$ {Math.abs(t.valor).toFixed(2)}
                 </td>
-                <td className="p-6 text-center">
-                     <div className="flex justify-center gap-2 opacity-0 group-hover:opacity-100 transition-all">
-    {/* BOTÃO EDITAR (LÁPIS) */}
+                <td className="p-8">
+  <div className="flex justify-center gap-4 transition-all">
+    {/* ÍCONE DE LÁPIS (EDITAR) */}
     <button 
       onClick={() => iniciarEdicao(t)} 
-      className="p-2 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-all"
-      title="Editar"
+      className="p-2 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-xl transition-all"
     >
-      <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
         <path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/><path d="m15 5 4 4"/>
       </svg>
     </button>
 
-    {/* BOTÃO EXCLUIR (LIXEIRA) */}
+    {/* ÍCONE DE LIXEIRA (EXCLUIR) */}
     <button 
       onClick={() => deletarTransacao(t.id_transacao)} 
-      className="p-2 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-all"
-      title="Excluir"
+      className="p-2 text-slate-400 hover:text-rose-500 hover:bg-rose-50 rounded-xl transition-all"
     >
-      <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
         <path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/><line x1="10" x2="10" y1="11" y2="17"/><line x1="14" x2="14" y1="11" y2="17"/>
       </svg>
     </button>

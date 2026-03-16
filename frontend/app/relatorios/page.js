@@ -81,302 +81,94 @@ export default function Relatorios() {
     } catch (err) { alert("Erro na conexão.") }
   }
 
-    const exportarPDF = async () => {
+   const exportarPDF = async () => {
   try {
-    // Importações dinâmicas com verificação
     const { default: jsPDF } = await import('jspdf');
     const { default: autoTable } = await import('jspdf-autotable');
     
-    // Validação de dados
     if (!transacoesFiltradas || transacoesFiltradas.length === 0) {
       alert('Não há transações para gerar o relatório.');
       return;
     }
 
     const doc = new jsPDF();
-    
-    // Configurações de Design (Centralizadas)
+    const nomeUsuario = localStorage.getItem('usuarioNome') || 'Usuário';
+
     const config = {
       colors: {
-        primary: [99, 102, 241],   // Indigo Moderno
-        success: [34, 197, 94],    // Verde Esmeralda
-        danger: [239, 68, 68],     // Vermelho Soft
-        warning: [245, 158, 11],   // Laranja para alertas
-        slate800: [30, 41, 59],    // Texto Principal
-        slate600: [71, 85, 105],   // Texto Médio
-        slate500: [100, 116, 139], // Texto Secundário
-        slate300: [203, 213, 225], // Bordas
-        slate100: [241, 245, 249], // Fundos/Linhas
+        primary: [99, 102, 241],   
+        success: [16, 185, 129],    
+        danger: [244, 63, 94],     
+        slate800: [30, 41, 59],    
+        slate600: [71, 85, 105],   
+        slate500: [100, 116, 139], 
+        slate300: [226, 232, 240], 
         white: [255, 255, 255],
       },
-      margins: {
-        left: 14,
-        right: 14,
-        top: 10,
-        bottom: 20,
+      margins: { left: 14, right: 14, top: 15 },
+      pageWidth: 210,
+    };
+
+    // Funções Auxiliares Internas
+    const formatCurrency = (v) => v.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    const formatDate = (d) => new Date(d).toLocaleDateString('pt-BR');
+
+    // 1. Cabeçalho Moderno
+    doc.setFillColor(...config.colors.primary).rect(config.margins.left, 15, 2, 12, 'F');
+    doc.setFont("helvetica", "bold").setFontSize(20).setTextColor(...config.colors.slate800).text("Financely", 22, 24);
+    doc.setFontSize(8).setTextColor(...config.colors.slate500).setFont("helvetica", "normal").text(`RELATÓRIO DE: ${nomeUsuario.toUpperCase()}`, 22, 29);
+    doc.text(`${new Date().toLocaleDateString('pt-BR')} • ${new Date().toLocaleTimeString('pt-BR', {hour:'2-digit', minute:'2-digit'})}`, 196, 24, { align: 'right' });
+
+    // 2. Tabela de Transações
+    autoTable(doc, {
+      startY: 40,
+      head: [["DESCRIÇÃO", "CATEGORIA", "DATA", "VALOR (R$)"]],
+      body: transacoesFiltradas.map(t => [
+        t.descricao,
+        (t.nome_categoria || 'Geral').toUpperCase(),
+        formatDate(t.data_transacao),
+        `${parseFloat(t.valor) >= 0 ? '+ ' : '- '} ${formatCurrency(Math.abs(t.valor))}`
+      ]),
+      theme: 'plain',
+      headStyles: { textColor: config.colors.slate600, fontSize: 8, fontStyle: 'bold' },
+      styles: { fontSize: 9, cellPadding: 5, textColor: config.colors.slate800 },
+      columnStyles: { 3: { halign: 'right', fontStyle: 'bold' } },
+      didParseCell: (data) => {
+        if (data.section === 'body' && data.column.index === 3) {
+          data.cell.styles.textColor = data.cell.raw.includes('+') ? config.colors.success : config.colors.danger;
+        }
       },
-      pageWidth: 210, // Largura A4 em mm
-    };
-
-    // ========== FUNÇÕES AUXILIARES ==========
-    const formatCurrency = (value, showSign = true) => {
-      const formatted = Math.abs(value).toLocaleString('pt-BR', {
-        minimumFractionDigits: 2,
-        maximumFractionDigits: 2,
-      });
-      return showSign ? `R$ ${formatted}` : formatted;
-    };
-
-    const formatDate = (dateString) => {
-      try {
-        return new Date(dateString).toLocaleDateString('pt-BR');
-      } catch {
-        return dateString;
+      didDrawCell: (data) => {
+        if (data.section === 'body') {
+          doc.setDrawColor(...config.colors.slate300).setLineWidth(0.1).line(data.cell.x, data.cell.y + data.cell.height, data.cell.x + data.cell.width, data.cell.y + data.cell.height);
+        }
       }
-    };
+    });
 
-    const calculateTotals = (transacoes) => {
-      return transacoes.reduce(
-        (acc, t) => {
-          const valor = Math.abs(t.valor || 0);
-          if (t.tipo_movimento === 'Entrada') {
-            acc.entradas += valor;
-          } else if (t.tipo_movimento === 'Saída') {
-            acc.saidas += valor;
-          }
-          return acc;
-        },
-        { entradas: 0, saidas: 0 }
-      );
-    };
-
-    const drawHeader = (doc) => {
-      // Detalhe vertical lateral
-      doc.setFillColor(...config.colors.primary)
-         .rect(config.margins.left, config.margins.top, 2, 12, 'F');
-      
-      // Título principal
-      doc.setFont("helvetica", "bold")
-         .setFontSize(18)
-         .setTextColor(...config.colors.slate800)
-         .text("Financely", config.margins.left + 6, 19);
-      
-      // Subtítulo
-      doc.setFontSize(8)
-         .setTextColor(...config.colors.slate600)
-         .setFont("helvetica", "normal")
-         .text("RELATÓRIO DE PERFORMANCE", config.margins.left + 6, 24);
-      
-      // Data e hora
-      const now = new Date();
-      const dateTimeStr = `${now.toLocaleDateString('pt-BR')} • ${now.toLocaleTimeString('pt-BR', {
-        hour: '2-digit',
-        minute: '2-digit'
-      })}`;
-      
-      doc.text(dateTimeStr, config.pageWidth - config.margins.right, 19, { align: 'right' });
-    };
-
-    const drawPeriod = (doc) => {
-      if (!dataInicial || !dataFinal) return;
-      
-      doc.setFontSize(8)
-         .setTextColor(...config.colors.slate500)
-         .setFont("helvetica", "italic")
-         .text(
-           `Período: ${formatDate(dataInicial)} a ${formatDate(dataFinal)}`,
-           config.margins.left,
-           32
-         );
-    };
-
-    const drawTable = (doc) => {
-      const totals = calculateTotals(transacoesFiltradas);
-      
-      autoTable(doc, {
-        startY: 40,
-        head: [["DESCRIÇÃO", "CATEGORIA", "DATA", "VALOR (R$)"]],
-        body: transacoesFiltradas.map(t => [
-          t.descricao || '-',
-          (t.nome_categoria || 'Outros').toUpperCase(),
-          formatDate(t.data_transacao),
-          `${t.tipo_movimento === 'Entrada' ? '+ ' : '- '} ${formatCurrency(Math.abs(t.valor), false)}`,
-          t.id // ID oculto para referência
-        ]),
-        theme: 'plain',
-        headStyles: { 
-          fillColor: config.colors.white,
-          textColor: config.colors.slate600,
-          fontSize: 7,
-          fontStyle: 'bold',
-          cellPadding: { bottom: 4, top: 4, left: 6, right: 6 },
-          halign: 'left',
-        },
-        styles: { 
-          fontSize: 8.5,
-          cellPadding: 6,
-          textColor: config.colors.slate800,
-          lineWidth: 0,
-          font: 'helvetica',
-        },
-        columnStyles: {
-          0: { cellWidth: 'auto' },
-          1: { cellWidth: 35, fontStyle: 'bold' },
-          2: { cellWidth: 25, halign: 'center' },
-          3: { cellWidth: 35, halign: 'right', fontStyle: 'bold' },
-        },
-        // Linhas separadoras minimalistas
-        didDrawCell: (data) => {
-          if (data.section === 'body' && data.row.index < transacoesFiltradas.length - 1) {
-            doc.setDrawColor(...config.colors.slate300)
-               .setLineWidth(0.3)
-               .line(
-                 data.cell.x,
-                 data.cell.y + data.cell.height,
-                 data.cell.x + data.cell.width,
-                 data.cell.y + data.cell.height
-               );
-          }
-        },
-        // Estilização condicional
-        didParseCell: (data) => {
-          if (data.section === 'body') {
-            // Cor do valor (entrada/saída)
-            if (data.column.index === 3) {
-              const isEntrada = data.cell.raw.includes('+');
-              data.cell.styles.textColor = isEntrada ? config.colors.success : config.colors.danger;
-            }
-            
-            // Estilo da categoria (tags)
-            if (data.column.index === 1) {
-              data.cell.styles.fontSize = 7;
-              data.cell.styles.textColor = config.colors.slate600;
-            }
-          }
-        },
-        // Cabeçalho fixo
-        didDrawPage: (data) => {
-          // Adiciona cabeçalho em novas páginas
-          if (data.pageCount > 1) {
-            doc.setFontSize(7)
-               .setTextColor(...config.colors.slate500)
-               .text(
-                 `Continuação... Página ${data.pageCount}`,
-                 config.margins.left,
-                 config.margins.top + 5
-               );
-          }
-        },
-      });
-    };
-
-    const drawSummaryCard = (doc, startY) => {
-      const cardWidth = config.pageWidth - (config.margins.left * 2);
-      const totals = calculateTotals(transacoesFiltradas);
-      const saldo = totals.entradas - totals.saidas;
-      const totalTransacoes = transacoesFiltradas.length;
-      
-      // Fundo do card com sombra
-      doc.setFillColor(248, 250, 252)
-         .roundedRect(config.margins.left, startY, cardWidth, 45, 4, 4, 'F');
-      
-      // Borda superior colorida
-      doc.setFillColor(...config.colors.primary)
-         .roundedRect(config.margins.left, startY, cardWidth, 3, 2, 2, 'F');
-      
-      // Título do card
-      doc.setFontSize(9)
-         .setFont("helvetica", "bold")
-         .setTextColor(...config.colors.slate700)
-         .text("RESUMO FINANCEIRO", config.margins.left + 10, startY + 12);
-      
-      // Estatísticas
-      const stats = [
-        { label: "TRANSAÇÕES", value: totalTransacoes, color: config.colors.slate600, x: 25, format: (v) => v },
-        { label: "ENTRADAS", value: totals.entradas, color: config.colors.success, x: 70, format: (v) => formatCurrency(v) },
-        { label: "SAÍDAS", value: totals.saidas, color: config.colors.danger, x: 115, format: (v) => formatCurrency(v) },
-        { label: "SALDO", value: saldo, color: saldo >= 0 ? config.colors.primary : config.colors.danger, x: 160, format: (v) => formatCurrency(v) },
-      ];
-      
-      stats.forEach(stat => {
-        doc.setFontSize(7)
-           .setFont("helvetica", "normal")
-           .setTextColor(...config.colors.slate500)
-           .text(stat.label, stat.x, startY + 25);
-        
-        doc.setFontSize(11)
-           .setFont("helvetica", "bold")
-           .setTextColor(...stat.color)
-           .text(stat.format(stat.value), stat.x, startY + 35);
-      });
-    };
-
-    const drawFooter = (doc) => {
-      const pageCount = doc.internal.getNumberOfPages();
-      
-      for (let i = 1; i <= pageCount; i++) {
-        doc.setPage(i);
-        
-        // Linha separadora
-        doc.setDrawColor(...config.colors.slate300)
-           .setLineWidth(0.5)
-           .line(config.margins.left, 280, config.pageWidth - config.margins.right, 280);
-        
-        // Texto do rodapé
-        doc.setFontSize(7)
-           .setFont("helvetica", "normal")
-           .setTextColor(...config.colors.slate500)
-           .text(
-             "Relatório gerado automaticamente pela plataforma Financely",
-             config.pageWidth / 2,
-             285,
-             { align: 'center' }
-           );
-        
-        // Número da página
-        doc.text(
-          `Página ${i} de ${pageCount}`,
-          config.pageWidth - config.margins.right,
-          285,
-          { align: 'right' }
-        );
-      }
-    };
-
-    // ========== EXECUÇÃO PRINCIPAL ==========
-    
-    // 1. Cabeçalho
-    drawHeader(doc);
-    
-    // 2. Período (se aplicável)
-    drawPeriod(doc);
-    
-    // 3. Tabela de transações
-    drawTable(doc);
-    
-    // 4. Card de resumo
+    // 3. Card de Resumo (O "toque" moderno)
     const finalY = doc.lastAutoTable.finalY + 15;
-    drawSummaryCard(doc, finalY);
-    
-    // 5. Rodapé com numeração de páginas
-    drawFooter(doc);
-    
-    // 6. Salvar PDF com nome personalizado
-    const fileName = `Financely_${new Date().toISOString().slice(0, 10)}_${transacoesFiltradas.length}transacoes.pdf`;
-    doc.save(fileName);
+    const entradas = transacoesFiltradas.filter(t => t.valor >= 0).reduce((acc, t) => acc + parseFloat(t.valor), 0);
+    const saidas = transacoesFiltradas.filter(t => t.valor < 0).reduce((acc, t) => acc + Math.abs(t.valor), 0);
+    const saldo = entradas - saidas;
+
+    doc.setFillColor(248, 250, 252).roundedRect(14, finalY, 182, 35, 3, 3, 'F');
+    doc.setFontSize(8).setFont("helvetica", "bold").setTextColor(...config.colors.slate500).text("RESUMO FINANCEIRO", 24, finalY + 10);
+
+    // Valores do Resumo
+    const drawStat = (label, value, color, x) => {
+      doc.setFontSize(7).setTextColor(...config.colors.slate500).text(label, x, finalY + 18);
+      doc.setFontSize(10).setTextColor(...color).text(`R$ ${formatCurrency(value)}`, x, finalY + 26);
+    };
+
+    drawStat("ENTRADAS", entradas, config.colors.success, 24);
+    drawStat("SAÍDAS", saidas, config.colors.danger, 74);
+    drawStat("SALDO LÍQUIDO", saldo, saldo >= 0 ? config.colors.primary : config.colors.danger, 124);
+
+    doc.save(`Financely_Relatorio_${new Date().toISOString().slice(0,10)}.pdf`);
     
   } catch (error) { 
-    console.error('Erro ao gerar PDF:', error);
-    
-    // Mensagem de erro mais amigável
-    let errorMessage = "Erro ao gerar relatório. ";
-    if (error.message?.includes('jspdf')) {
-      errorMessage += "Problema ao carregar bibliotecas necessárias.";
-    } else {
-      errorMessage += "Tente novamente ou contate o suporte.";
-    }
-    
-    alert(errorMessage);
+    console.error('Erro PDF:', error);
+    alert("Erro ao gerar relatório técnico.");
   }
 };
   const exportarCSV = () => {

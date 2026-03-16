@@ -1,7 +1,6 @@
 'use client'
 import { useState, useEffect } from 'react'
 
-// URL Dinâmica para Vercel/Local
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000';
 
 export default function Relatorios() {
@@ -10,7 +9,13 @@ export default function Relatorios() {
   const [filtroTexto, setFiltroTexto] = useState('')
   const [filtroCategoria, setFiltroCategoria] = useState('')
   const [editando, setEditando] = useState(null)
-  const [formEdit, setFormEdit] = useState({ descricao: '', valor: '', id_categoria: '', data: '' })
+  const [formEdit, setFormEdit] = useState({ 
+    descricao: '', 
+    valor: '', 
+    id_categoria: '', 
+    data_transacao: '',
+    tipo_movimento: '' 
+  })
 
   const carregarDados = async () => {
     try {
@@ -18,100 +23,43 @@ export default function Relatorios() {
       if (!idUsuario) return
 
       const resT = await fetch(`${API_URL}/listar-transacoes?id_usuario=${idUsuario}`)
-      setTransacoes(await resT.json())
+      const dadosT = await resT.json()
+      setTransacoes(Array.isArray(dadosT) ? dadosT : [])
       
       const resC = await fetch(`${API_URL}/listar-categorias?id_usuario=${idUsuario}`)
-      setCategorias(await resC.json())
-    } catch (err) { 
-      console.error("Erro ao carregar dados:", err) 
-    }
+      const dadosC = await resC.json()
+      setCategorias(Array.isArray(dadosC) ? dadosC : [])
+    } catch (err) { console.error("Erro ao carregar dados:", err) }
   }
 
   useEffect(() => { carregarDados() }, [])
 
-  // --- FUNÇÃO DE EXCLUIR COM POP-UP ---
+  // --- FILTRAGEM COMBINADA (CRUCIAL) ---
+  const transacoesFiltradas = transacoes.filter(t => {
+    const descricaoMatch = t.descricao.toLowerCase().includes(filtroTexto.toLowerCase())
+    const categoriaMatch = filtroCategoria === '' || String(t.id_categoria) === String(filtroCategoria)
+    return descricaoMatch && categoriaMatch
+  })
+
+  // --- EXCLUSÃO ---
   const deletarTransacao = async (id) => {
-    const confirmou = window.confirm("⚠️ Você tem certeza que deseja excluir esta transação? Essa ação não pode ser desfeita.")
-    
-    if (confirmou) {
+    if (window.confirm("⚠️ Você tem certeza que deseja excluir esta transação?")) {
       try {
-        const res = await fetch(`${API_URL}/deletar-transacao/${id}`, {
-          method: 'DELETE',
-        })
-        
-        if (res.ok) {
-          carregarDados() 
-          alert("Sucesso! Transação removida.")
-        } else {
-          alert("Erro ao tentar excluir no servidor.")
-        }
-      } catch (err) {
-        console.error("Erro ao deletar:", err)
-        alert("Houve um erro na conexão.")
-      }
+        const res = await fetch(`${API_URL}/deletar-transacao/${id}`, { method: 'DELETE' })
+        if (res.ok) { carregarDados(); alert("Removido com sucesso!") }
+      } catch (err) { alert("Erro ao deletar.") }
     }
   }
 
-  // --- FUNÇÕES DE EXPORTAÇÃO ---
-  const exportarPDF = async () => {
-    try {
-      const { default: jsPDF } = await import('jspdf')
-      const { default: autoTable } = await import('jspdf-autotable')
-      const doc = new jsPDF()
-      
-      const cinzaEscuro = [30, 41, 59], cinzaClaro = [148, 163, 184], indigo = [79, 70, 229]
-      const esmeralda = [16, 185, 129], rose = [244, 63, 94], branco = [255, 255, 255]
-
-      const formatarData = (data) => data ? new Date(data).toLocaleDateString('pt-BR') : '--/--';
-      const formatarMoeda = (valor) => `R$ ${Math.abs(valor).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`;
-
-      doc.setFont('helvetica', 'bold').setFontSize(22).setTextColor(...cinzaEscuro).text("Financely", 14, 22);
-      doc.setFont('helvetica', 'normal').setFontSize(10).setTextColor(...cinzaClaro).text(`Relatório de Lançamentos`, 14, 30);
-
-      const colunas = ["Descrição", "Tipo", "Categoria", "Data", "Valor"];
-      const linhas = transacoesFiltradas.map(t => [
-        t.descricao,
-        parseFloat(t.valor) >= 0 ? 'Entrada' : 'Saída',
-        t.nome_categoria,
-        formatarData(t.data_transacao),
-        formatarMoeda(t.valor)
-      ])
-
-      autoTable(doc, {
-        startY: 45,
-        head: [colunas],
-        body: linhas,
-        headStyles: { fillColor: indigo, textColor: branco },
-        styles: { fontSize: 9 }
-      })
-
-      doc.save(`relatorio_financely.pdf`)
-    } catch (error) { console.error("Erro PDF:", error) }
-  }
-
-  const exportarCSV = () => {
-    const cabecalho = ["Descricao", "Categoria", "Data", "Valor (R$)", "Tipo\n"]
-    const linhas = transacoesFiltradas.map(t => {
-      const data = t.data_transacao ? new Date(t.data_transacao).toLocaleDateString('pt-BR') : '--/--'
-      const valor = parseFloat(t.valor).toFixed(2).replace('.', ',')
-      const tipo = parseFloat(t.valor) >= 0 ? 'Entrada' : 'Saida'
-      return `${t.descricao};${t.nome_categoria};${data};${valor};${tipo}`
-    })
-    const blob = new Blob(["\ufeff" + (cabecalho + linhas.join('\n'))], { type: 'text/csv;charset=utf-8;' })
-    const link = document.createElement("a")
-    link.href = URL.createObjectURL(blob)
-    link.download = "relatorio_financely.csv"
-    link.click()
-  }
-
-  // --- FUNÇÕES DE EDIÇÃO ---
+  // --- EDIÇÃO ---
   const iniciarEdicao = (t) => {
     setEditando(t.id_transacao)
     setFormEdit({ 
       descricao: t.descricao, 
-      valor: t.valor, 
+      valor: Math.abs(t.valor), 
       id_categoria: t.id_categoria,
-      data: t.data_transacao ? t.data_transacao.split('T')[0] : '' 
+      data_transacao: t.data_transacao ? t.data_transacao.split('T')[0] : '',
+      tipo_movimento: t.tipo_movimento 
     })
   }
 
@@ -119,106 +67,141 @@ export default function Relatorios() {
     e.preventDefault()
     if (!window.confirm("Deseja salvar as alterações?")) return;
 
-    const res = await fetch(`${API_URL}/editar-transacao/${editando}`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(formEdit)
-    })
-    if (res.ok) { 
-      setEditando(null); 
-      carregarDados();
-      alert("Alterado com sucesso!");
-    }
+    try {
+      const res = await fetch(`${API_URL}/editar-transacao/${editando}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(formEdit)
+      })
+      if (res.ok) { 
+        setEditando(null); 
+        carregarDados();
+        alert("Atualizado com sucesso!");
+      }
+    } catch (err) { alert("Erro na conexão.") }
   }
 
-  const transacoesFiltradas = transacoes.filter(t => {
-    const buscaOK = t.descricao.toLowerCase().includes(filtroTexto.toLowerCase())
-    const categoriaOK = filtroCategoria === '' || t.id_categoria === parseInt(filtroCategoria)
-    return buscaOK && categoriaOK
-  })
+  // --- EXPORTAÇÃO PDF (COMPLETA) ---
+  const exportarPDF = async () => {
+    try {
+      const { default: jsPDF } = await import('jspdf')
+      const { default: autoTable } = await import('jspdf-autotable')
+      const doc = new jsPDF()
+      
+      doc.setFontSize(20);
+      doc.text("Relatório Financely", 14, 20);
+      doc.setFontSize(10);
+      doc.text(`Gerado em: ${new Date().toLocaleDateString()}`, 14, 28);
+
+      const colunas = ["Descrição", "Tipo", "Categoria", "Data", "Valor"];
+      const linhas = transacoesFiltradas.map(t => [
+        t.descricao,
+        t.tipo_movimento,
+        t.nome_categoria,
+        new Date(t.data_transacao).toLocaleDateString('pt-BR'),
+        `R$ ${Math.abs(t.valor).toFixed(2)}`
+      ])
+
+      autoTable(doc, {
+        startY: 35,
+        head: [colunas],
+        body: linhas,
+        headStyles: { fillColor: [79, 70, 229] }
+      })
+
+      doc.save(`relatorio_financely.pdf`)
+    } catch (error) { alert("Erro ao gerar PDF") }
+  }
+
+  const exportarCSV = () => {
+    const cabecalho = "Descricao;Categoria;Data;Valor;Tipo\n";
+    const linhas = transacoesFiltradas.map(t => 
+      `${t.descricao};${t.nome_categoria};${new Date(t.data_transacao).toLocaleDateString()};${t.valor};${t.tipo_movimento}`
+    ).join('\n');
+    const blob = new Blob(["\ufeff" + cabecalho + linhas], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement("a");
+    link.href = URL.createObjectURL(blob);
+    link.download = "relatorio.csv";
+    link.click();
+  }
 
   return (
-    <div className="space-y-8 text-black">
+    <div className="space-y-8 text-black pb-20">
       <div className="flex justify-between items-center">
         <div>
-          <h2 className="text-3xl font-bold text-slate-800 tracking-tight">Relatórios</h2>
-          <p className="text-slate-500 text-sm font-medium">Gerencie e exporte seu histórico financeiro.</p>
+          <h2 className="text-3xl font-bold text-slate-800">Relatórios</h2>
+          <p className="text-slate-500 text-sm">Controle total dos seus dados.</p>
         </div>
-        <div className="flex gap-3">
-          <button onClick={exportarCSV} className="px-5 py-3 bg-slate-100 text-slate-600 rounded-2xl font-bold hover:bg-slate-200 transition-all text-sm">CSV</button>
-          <button onClick={exportarPDF} className="flex items-center gap-2 px-6 py-3 bg-indigo-600 text-white rounded-2xl font-bold shadow-lg shadow-indigo-100 hover:bg-indigo-700 transition-all">
-            Gerar PDF
-          </button>
+        <div className="flex gap-2">
+          <button onClick={exportarCSV} className="px-4 py-2 bg-slate-100 rounded-xl font-bold text-xs hover:bg-slate-200">CSV</button>
+          <button onClick={exportarPDF} className="px-4 py-2 bg-indigo-600 text-white rounded-xl font-bold text-xs hover:bg-indigo-700">PDF</button>
         </div>
       </div>
 
-      {/* FILTROS */}
-      <div className="bg-white p-6 rounded-[2rem] shadow-xl shadow-slate-200/50 border border-slate-100 flex flex-wrap gap-4 items-end">
-        <div className="flex-1 min-w-[200px] space-y-2">
-          <label className="text-xs font-bold text-slate-400 ml-1">Pesquisar</label>
-          <input type="text" placeholder="Filtrar descrição..." className="w-full p-4 bg-slate-50 border border-slate-100 rounded-2xl outline-none focus:ring-2 focus:ring-indigo-100 text-sm font-semibold" value={filtroTexto} onChange={e => setFiltroTexto(e.target.value)} />
-        </div>
-        <div className="w-48 space-y-2">
-          <label className="text-xs font-bold text-slate-400 ml-1">Categoria</label>
-          <select className="w-full p-4 bg-slate-50 border border-slate-100 rounded-2xl outline-none focus:ring-2 focus:ring-indigo-100 text-sm font-semibold" value={filtroCategoria} onChange={e => setFiltroCategoria(e.target.value)}>
-            <option value="">Todas</option>
-            {categorias.map(c => <option key={c.id_categoria} value={c.id_categoria}>{c.nome_categoria}</option>)}
-          </select>
-        </div>
+      {/* FILTROS INTEGRADOS */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 bg-white p-6 rounded-3xl shadow-sm border border-slate-100">
+        <input 
+          type="text" 
+          placeholder="Pesquisar descrição..." 
+          className="p-4 bg-slate-50 rounded-2xl outline-none border border-slate-50 focus:border-indigo-300 transition-all"
+          value={filtroTexto} 
+          onChange={e => setFiltroTexto(e.target.value)} 
+        />
+        <select 
+          className="p-4 bg-slate-50 rounded-2xl outline-none border border-slate-50"
+          value={filtroCategoria} 
+          onChange={e => setFiltroCategoria(e.target.value)}
+        >
+          <option value="">Todas as Categorias</option>
+          {categorias.map(c => <option key={c.id_categoria} value={c.id_categoria}>{c.nome_categoria}</option>)}
+        </select>
       </div>
 
-      {/* TABELA */}
-      <div className="bg-white rounded-[2.5rem] shadow-xl shadow-slate-200/50 border border-slate-100 overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="w-full text-left">
-            <thead>
-              <tr className="bg-slate-50/50 border-b border-slate-100">
-                <th className="p-6 text-xs font-bold text-slate-400">Descrição</th>
-                <th className="p-6 text-xs font-bold text-slate-400 text-center">Tipo</th>
-                <th className="p-6 text-xs font-bold text-slate-400 text-center">Categoria</th>
-                <th className="p-6 text-xs font-bold text-slate-400 text-center">Data</th>
-                <th className="p-6 text-xs font-bold text-slate-400 text-right">Valor</th>
-                <th className="p-6 text-xs font-bold text-slate-400 text-center">Ações</th>
+      {/* TABELA DE DADOS */}
+      <div className="bg-white rounded-3xl shadow-xl shadow-slate-200/50 border border-slate-100 overflow-hidden">
+        <table className="w-full text-left">
+          <thead className="bg-slate-50 border-b border-slate-100">
+            <tr>
+              <th className="p-6 text-xs font-bold text-slate-400 uppercase">Descrição</th>
+              <th className="p-6 text-xs font-bold text-slate-400 uppercase text-center">Categoria</th>
+              <th className="p-6 text-xs font-bold text-slate-400 uppercase text-right">Valor</th>
+              <th className="p-6 text-xs font-bold text-slate-400 uppercase text-center">Ações</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-slate-100">
+            {transacoesFiltradas.map((t) => (
+              <tr key={t.id_transacao} className="group hover:bg-slate-50/80 transition-all">
+                <td className="p-6 font-semibold text-slate-700">{t.descricao}</td>
+                <td className="p-6 text-center"><span className="text-[10px] font-bold bg-slate-100 px-2 py-1 rounded-md text-slate-500 uppercase">{t.nome_categoria}</span></td>
+                <td className={`p-6 text-right font-bold ${t.valor >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
+                  R$ {Math.abs(t.valor).toFixed(2)}
+                </td>
+                <td className="p-6 text-center">
+                  <div className="flex justify-center gap-4 opacity-0 group-hover:opacity-100 transition-all">
+                    <button onClick={() => iniciarEdicao(t)} className="text-indigo-600 font-bold text-xs hover:underline">Editar</button>
+                    <button onClick={() => deletarTransacao(t.id_transacao)} className="text-red-500 font-bold text-xs hover:underline">Excluir</button>
+                  </div>
+                </td>
               </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100">
-              {transacoesFiltradas.map((t) => (
-                <tr key={t.id_transacao} className="hover:bg-slate-50/50 transition-all group">
-                  <td className="p-6 font-semibold text-slate-800">{t.descricao}</td>
-                  <td className="p-6 text-center text-xs font-medium text-slate-500">{parseFloat(t.valor) >= 0 ? 'Entrada' : 'Saída'}</td>
-                  <td className="p-6 text-center"><span className="bg-slate-100 text-slate-600 text-[10px] font-bold px-3 py-1 rounded-lg">{t.nome_categoria}</span></td>
-                  <td className="p-6 text-center text-sm text-slate-500">{new Date(t.data_transacao).toLocaleDateString('pt-BR')}</td>
-                  <td className={`p-6 text-right font-bold ${parseFloat(t.valor) >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>R$ {Math.abs(parseFloat(t.valor)).toFixed(2)}</td>
-                  <td className="p-6 text-center">
-                    <div className="flex justify-center gap-4 opacity-0 group-hover:opacity-100 transition-opacity">
-                      <button onClick={() => iniciarEdicao(t)} className="text-indigo-600 font-bold text-xs hover:underline">Editar</button>
-                      <button onClick={() => deletarTransacao(t.id_transacao)} className="text-red-500 font-bold text-xs hover:underline">Excluir</button>
-                    </div>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+            ))}
+          </tbody>
+        </table>
       </div>
 
       {/* MODAL DE EDIÇÃO */}
       {editando && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
           <div className="bg-white w-full max-w-md rounded-[2.5rem] p-10 shadow-2xl">
-            <h3 className="text-xl font-bold mb-6 text-slate-800">Editar Lançamento</h3>
+            <h3 className="text-xl font-bold mb-6 text-slate-800">Editar Registro</h3>
             <form onSubmit={salvarEdicao} className="space-y-4">
-              <div className="space-y-1">
-                <label className="text-[10px] font-bold text-slate-400 uppercase ml-1">Descrição</label>
-                <input type="text" className="w-full p-4 bg-slate-50 rounded-xl outline-none font-semibold border border-slate-100" value={formEdit.descricao} onChange={e => setFormEdit({...formEdit, descricao: e.target.value})} />
-              </div>
-              <div className="space-y-1">
-                <label className="text-[10px] font-bold text-slate-400 uppercase ml-1">Valor (R$)</label>
-                <input type="number" className="w-full p-4 bg-slate-50 rounded-xl outline-none font-semibold border border-slate-100" value={formEdit.valor} onChange={e => setFormEdit({...formEdit, valor: e.target.value})} />
-              </div>
+              <input type="text" className="w-full p-4 bg-slate-50 rounded-xl outline-none font-semibold border border-slate-100" value={formEdit.descricao} onChange={e => setFormEdit({...formEdit, descricao: e.target.value})} />
+              <input type="number" className="w-full p-4 bg-slate-50 rounded-xl outline-none font-semibold border border-slate-100" value={formEdit.valor} onChange={e => setFormEdit({...formEdit, valor: e.target.value})} />
+              <select className="w-full p-4 bg-slate-50 rounded-xl outline-none font-semibold border border-slate-100" value={formEdit.id_categoria} onChange={e => setFormEdit({...formEdit, id_categoria: e.target.value})}>
+                {categorias.map(c => <option key={c.id_categoria} value={c.id_categoria}>{c.nome_categoria}</option>)}
+              </select>
               <div className="flex gap-3 pt-4">
-                <button type="button" onClick={() => setEditando(null)} className="flex-1 py-4 font-bold text-slate-400 hover:text-slate-600">Cancelar</button>
-                <button type="submit" className="flex-1 py-4 font-bold bg-indigo-600 text-white rounded-xl shadow-lg shadow-indigo-100 hover:bg-indigo-700">Salvar</button>
+                <button type="button" onClick={() => setEditando(null)} className="flex-1 py-4 font-bold text-slate-400">Cancelar</button>
+                <button type="submit" className="flex-1 py-4 font-bold bg-indigo-600 text-white rounded-xl">Salvar</button>
               </div>
             </form>
           </div>

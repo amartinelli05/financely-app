@@ -83,56 +83,56 @@ export default function Relatorios() {
 
   // --- EXPORTAÇÃO PDF (COMPLETA) ---
 const exportarPDF = async () => {
-  try {
-    const { default: jsPDF } = await import('jspdf');
-    const { default: autoTable } = await import('jspdf-autotable');
-    const doc = new jsPDF();
-    
-    // Cores do Design System
-    const indigo = [79, 70, 229];
-    const slate800 = [30, 41, 59];
-    const slate400 = [148, 163, 184];
+    try {
+      const { default: jsPDF } = await import('jspdf')
+      const { default: autoTable } = await import('jspdf-autotable')
+      const doc = new jsPDF()
+      
+      const indigo = [79, 70, 229];
+      const slate800 = [30, 41, 59];
+      const slate400 = [148, 163, 184];
 
-    // Cabeçalho Moderno
-    doc.setFont("helvetica", "bold").setFontSize(22).setTextColor(...indigo);
-    doc.text("Financely", 14, 22);
-    
-    doc.setFont("helvetica", "normal").setFontSize(10).setTextColor(...slate400);
-    doc.text(`Relatório de ${localStorage.getItem('usuarioNome') || 'Lançamentos'}`, 14, 30);
-    doc.text(`Gerado em: ${new Date().toLocaleDateString('pt-BR')}`, 14, 35);
+      // Cabeçalho Premium
+      doc.setFont("helvetica", "bold").setFontSize(26).setTextColor(...indigo);
+      doc.text("Financely", 14, 25);
+      
+      doc.setFont("helvetica", "normal").setFontSize(10).setTextColor(...slate400);
+      doc.text(`RELATÓRIO DE LANÇAMENTOS`, 14, 34);
+      doc.text(`GERADO EM: ${new Date().toLocaleDateString('pt-BR')}`, 14, 39);
 
-    const colunas = ["Descrição", "Tipo", "Categoria", "Data", "Valor"];
-    const linhas = transacoesFiltradas.map(t => [
-      t.descricao,
-      t.tipo_movimento,
-      t.nome_categoria,
-      new Date(t.data_transacao).toLocaleDateString('pt-BR'),
-      `R$ ${Math.abs(t.valor).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`
-    ]);
+      const colunas = ["Descrição", "Tipo", "Categoria", "Data", "Valor"];
+      const linhas = transacoesFiltradas.map(t => [
+        t.descricao,
+        t.tipo_movimento,
+        t.nome_categoria,
+        new Date(t.data_transacao).toLocaleDateString('pt-BR'),
+        `R$ ${Math.abs(t.valor).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`
+      ]);
 
-    autoTable(doc, {
-      startY: 45,
-      head: [colunas],
-      body: linhas,
-      theme: 'grid',
-      headStyles: { fillColor: indigo, textColor: [255, 255, 255], fontStyle: 'bold' },
-      styles: { fontSize: 9, cellPadding: 4 },
-      columnStyles: {
-        4: { halign: 'right', fontStyle: 'bold' } // Valor alinhado à direita
-      },
-      didParseCell: (data) => {
-        if (data.section === 'body' && data.column.index === 1) {
-          // Cor baseada no tipo: Verde para Entrada, Vermelho para Saída
-          data.cell.styles.textColor = data.cell.raw === 'Entrada' ? [16, 185, 129] : [244, 63, 94];
+      autoTable(doc, {
+        startY: 48,
+        head: [colunas],
+        body: linhas,
+        theme: 'striped',
+        headStyles: { fillColor: indigo, textColor: [255, 255, 255], fontStyle: 'bold', halign: 'center' },
+        styles: { fontSize: 9, cellPadding: 5, font: "helvetica" },
+        columnStyles: { 4: { halign: 'right', fontStyle: 'bold' } },
+        didParseCell: (data) => {
+          if (data.section === 'body' && data.column.index === 1) {
+            data.cell.styles.textColor = data.cell.raw === 'Entrada' ? [16, 185, 129] : [244, 63, 94];
+          }
         }
-      }
-    });
+      });
 
-    doc.save(`relatorio_financely.pdf`);
-  } catch (error) {
-    alert("Erro ao gerar o PDF moderno.");
+      // Rodapé com Resumo
+      const finalY = doc.lastAutoTable.finalY + 15;
+      doc.setDrawColor(226, 232, 240).line(14, finalY, 196, finalY);
+      doc.setFontSize(11).setTextColor(...slate800).text("Resumo do Período", 14, finalY + 10);
+      
+      doc.save(`relatorio_financely.pdf`);
+    } catch (error) { alert("Erro PDF") }
   }
-};
+
   const exportarCSV = () => {
     const cabecalho = "Descricao;Categoria;Data;Valor;Tipo\n";
     const linhas = transacoesFiltradas.map(t => 

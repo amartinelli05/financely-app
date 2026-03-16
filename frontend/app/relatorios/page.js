@@ -1,7 +1,7 @@
 'use client'
 import { useState, useEffect } from 'react'
 
-// AJUSTE: URL Dinâmica para Vercel/Local
+// URL Dinâmica para Vercel/Local
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000';
 
 export default function Relatorios() {
@@ -17,90 +17,73 @@ export default function Relatorios() {
       const idUsuario = localStorage.getItem('usuarioId')
       if (!idUsuario) return
 
-      // AJUSTADO: Usando crases e API_URL
       const resT = await fetch(`${API_URL}/listar-transacoes?id_usuario=${idUsuario}`)
       setTransacoes(await resT.json())
       
       const resC = await fetch(`${API_URL}/listar-categorias?id_usuario=${idUsuario}`)
       setCategorias(await resC.json())
-    } catch (err) { console.error(err) }
+    } catch (err) { 
+      console.error("Erro ao carregar dados:", err) 
+    }
   }
 
   useEffect(() => { carregarDados() }, [])
 
+  // --- FUNÇÃO DE EXCLUIR COM POP-UP ---
+  const deletarTransacao = async (id) => {
+    const confirmou = window.confirm("⚠️ Você tem certeza que deseja excluir esta transação? Essa ação não pode ser desfeita.")
+    
+    if (confirmou) {
+      try {
+        const res = await fetch(`${API_URL}/deletar-transacao/${id}`, {
+          method: 'DELETE',
+        })
+        
+        if (res.ok) {
+          carregarDados() 
+          alert("Sucesso! Transação removida.")
+        } else {
+          alert("Erro ao tentar excluir no servidor.")
+        }
+      } catch (err) {
+        console.error("Erro ao deletar:", err)
+        alert("Houve um erro na conexão.")
+      }
+    }
+  }
+
+  // --- FUNÇÕES DE EXPORTAÇÃO ---
   const exportarPDF = async () => {
     try {
       const { default: jsPDF } = await import('jspdf')
       const { default: autoTable } = await import('jspdf-autotable')
-
       const doc = new jsPDF()
       
-      const cinzaEscuro = [30, 41, 59]
-      const cinzaClaro = [148, 163, 184]
-      const indigo = [79, 70, 229]
-      const esmeralda = [16, 185, 129]
-      const rose = [244, 63, 94]
-      const branco = [255, 255, 255]
+      const cinzaEscuro = [30, 41, 59], cinzaClaro = [148, 163, 184], indigo = [79, 70, 229]
+      const esmeralda = [16, 185, 129], rose = [244, 63, 94], branco = [255, 255, 255]
 
       const formatarData = (data) => data ? new Date(data).toLocaleDateString('pt-BR') : '--/--';
-      const formatarMoeda = (valor) => 
-        `R$ ${Math.abs(valor).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`;
+      const formatarMoeda = (valor) => `R$ ${Math.abs(valor).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`;
 
-      doc.setFont('helvetica', 'bold');
-      doc.setFontSize(22);
-      doc.setTextColor(...cinzaEscuro);
-      doc.text("Financely", 14, 22);
-      
-      doc.setFont('helvetica', 'normal');
-      doc.setFontSize(10);
-      doc.setTextColor(...cinzaClaro);
-      doc.text(`Relatório de ${localStorage.getItem('usuarioNome') || 'Lançamentos'}`, 14, 30);
-      
-      doc.setFont('helvetica', 'italic');
-      doc.setFontSize(9);
-      doc.setTextColor(...cinzaClaro);
-      doc.text(`Gerado em: ${formatarData(new Date())}`, 14, 38);
-
-      const entradas = transacoesFiltradas
-        .filter(t => parseFloat(t.valor) > 0)
-        .reduce((acc, t) => acc + parseFloat(t.valor), 0);
-      
-      const saidas = transacoesFiltradas
-        .filter(t => parseFloat(t.valor) < 0)
-        .reduce((acc, t) => acc + parseFloat(t.valor), 0);
-
-      const liquido = entradas + saidas;
+      doc.setFont('helvetica', 'bold').setFontSize(22).setTextColor(...cinzaEscuro).text("Financely", 14, 22);
+      doc.setFont('helvetica', 'normal').setFontSize(10).setTextColor(...cinzaClaro).text(`Relatório de Lançamentos`, 14, 30);
 
       const colunas = ["Descrição", "Tipo", "Categoria", "Data", "Valor"];
       const linhas = transacoesFiltradas.map(t => [
-        { content: t.descricao, styles: { fontStyle: 'bold', textColor: cinzaEscuro } },
-        { content: parseFloat(t.valor) >= 0 ? 'Entrada' : 'Saída', styles: { textColor: parseFloat(t.valor) >= 0 ? esmeralda : rose, fontStyle: 'bold' } },
+        t.descricao,
+        parseFloat(t.valor) >= 0 ? 'Entrada' : 'Saída',
         t.nome_categoria,
-        { content: formatarData(t.data_transacao), styles: { textColor: cinzaClaro } },
-        { content: formatarMoeda(t.valor), styles: { fontStyle: 'bold', halign: 'right', textColor: cinzaEscuro } }
+        formatarData(t.data_transacao),
+        formatarMoeda(t.valor)
       ])
 
       autoTable(doc, {
         startY: 45,
         head: [colunas],
         body: linhas,
-        theme: 'plain',
-        headStyles: { fillColor: indigo, textColor: branco, fontStyle: 'bold', halign: 'center' },
-        styles: { fontSize: 9, cellPadding: 4, lineColor: [226, 232, 240], lineWidth: 0.1 }
+        headStyles: { fillColor: indigo, textColor: branco },
+        styles: { fontSize: 9 }
       })
-
-      let finalY = doc.lastAutoTable.finalY + 15;
-      doc.setFillColor(248, 250, 252);
-      doc.roundedRect(120, finalY - 5, 80, 45, 10, 10, 'F');
-      doc.setFontSize(11);
-      doc.setTextColor(...cinzaEscuro);
-      doc.text("Resumo Financeiro:", 125, finalY);
-
-      doc.setFontSize(10);
-      doc.text("(+) Entradas", 125, finalY + 10);
-      doc.text(formatarMoeda(entradas), 195, finalY + 10, { align: 'right' });
-      doc.text("(-) Saídas", 125, finalY + 18);
-      doc.text(formatarMoeda(saidas), 195, finalY + 18, { align: 'right' });
 
       doc.save(`relatorio_financely.pdf`)
     } catch (error) { console.error("Erro PDF:", error) }
@@ -114,38 +97,14 @@ export default function Relatorios() {
       const tipo = parseFloat(t.valor) >= 0 ? 'Entrada' : 'Saida'
       return `${t.descricao};${t.nome_categoria};${data};${valor};${tipo}`
     })
-    const conteudoCSV = cabecalho + linhas.join('\n')
-    const blob = new Blob(["\ufeff" + conteudoCSV], { type: 'text/csv;charset=utf-8;' })
+    const blob = new Blob(["\ufeff" + (cabecalho + linhas.join('\n'))], { type: 'text/csv;charset=utf-8;' })
     const link = document.createElement("a")
     link.href = URL.createObjectURL(blob)
     link.download = "relatorio_financely.csv"
     link.click()
   }
 
- const deletarTransacao = async (id) => {
-  // O pop-up aparece aqui (Isso só funciona no navegador!)
-  const confirmou = window.confirm("⚠️ Você tem certeza que deseja excluir esta transação? Essa ação não pode ser desfeita.");
-  
-  if (confirmou) {
-    try {
-      const res = await fetch(`${API_URL}/deletar-transacao/${id}`, {
-        method: 'DELETE',
-      });
-      
-      if (res.ok) {
-        // Recarrega a lista para sumir o item da tela
-        carregarDados(); 
-        alert("Sucesso! Transação removida.");
-      } else {
-        alert("Erro ao tentar excluir no servidor.");
-      }
-    } catch (err) {
-      console.error("Erro ao deletar:", err);
-      alert("Houve um erro na conexão.");
-    }
-  }
-};
-
+  // --- FUNÇÕES DE EDIÇÃO ---
   const iniciarEdicao = (t) => {
     setEditando(t.id_transacao)
     setFormEdit({ 
@@ -158,12 +117,18 @@ export default function Relatorios() {
 
   const salvarEdicao = async (e) => {
     e.preventDefault()
+    if (!window.confirm("Deseja salvar as alterações?")) return;
+
     const res = await fetch(`${API_URL}/editar-transacao/${editando}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(formEdit)
     })
-    if (res.ok) { setEditando(null); carregarDados() }
+    if (res.ok) { 
+      setEditando(null); 
+      carregarDados();
+      alert("Alterado com sucesso!");
+    }
   }
 
   const transacoesFiltradas = transacoes.filter(t => {
@@ -177,7 +142,7 @@ export default function Relatorios() {
       <div className="flex justify-between items-center">
         <div>
           <h2 className="text-3xl font-bold text-slate-800 tracking-tight">Relatórios</h2>
-          <p className="text-slate-400 text-sm font-medium">Gerencie e exporte seu histórico.</p>
+          <p className="text-slate-500 text-sm font-medium">Gerencie e exporte seu histórico financeiro.</p>
         </div>
         <div className="flex gap-3">
           <button onClick={exportarCSV} className="px-5 py-3 bg-slate-100 text-slate-600 rounded-2xl font-bold hover:bg-slate-200 transition-all text-sm">CSV</button>
@@ -187,13 +152,14 @@ export default function Relatorios() {
         </div>
       </div>
 
+      {/* FILTROS */}
       <div className="bg-white p-6 rounded-[2rem] shadow-xl shadow-slate-200/50 border border-slate-100 flex flex-wrap gap-4 items-end">
         <div className="flex-1 min-w-[200px] space-y-2">
-          <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Pesquisar</label>
-          <input type="text" placeholder="Filtrar descrição..." className="w-full p-4 bg-slate-50 border border-slate-100 rounded-2xl outline-none focus:ring-2 focus:ring-indigo-100 text-sm font-semibold transition-all" value={filtroTexto} onChange={e => setFiltroTexto(e.target.value)} />
+          <label className="text-xs font-bold text-slate-400 ml-1">Pesquisar</label>
+          <input type="text" placeholder="Filtrar descrição..." className="w-full p-4 bg-slate-50 border border-slate-100 rounded-2xl outline-none focus:ring-2 focus:ring-indigo-100 text-sm font-semibold" value={filtroTexto} onChange={e => setFiltroTexto(e.target.value)} />
         </div>
         <div className="w-48 space-y-2">
-          <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Categoria</label>
+          <label className="text-xs font-bold text-slate-400 ml-1">Categoria</label>
           <select className="w-full p-4 bg-slate-50 border border-slate-100 rounded-2xl outline-none focus:ring-2 focus:ring-indigo-100 text-sm font-semibold" value={filtroCategoria} onChange={e => setFiltroCategoria(e.target.value)}>
             <option value="">Todas</option>
             {categorias.map(c => <option key={c.id_categoria} value={c.id_categoria}>{c.nome_categoria}</option>)}
@@ -201,31 +167,32 @@ export default function Relatorios() {
         </div>
       </div>
 
+      {/* TABELA */}
       <div className="bg-white rounded-[2.5rem] shadow-xl shadow-slate-200/50 border border-slate-100 overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full text-left">
             <thead>
               <tr className="bg-slate-50/50 border-b border-slate-100">
-                <th className="p-6 text-[10px] font-black text-slate-400 uppercase tracking-widest">Descrição</th>
-                <th className="p-6 text-[10px] font-black text-slate-400 uppercase tracking-widest text-center">Tipo</th>
-                <th className="p-6 text-[10px] font-black text-slate-400 uppercase tracking-widest text-center">Categoria</th>
-                <th className="p-6 text-[10px] font-black text-slate-400 uppercase tracking-widest text-center">Data</th>
-                <th className="p-6 text-[10px] font-black text-slate-400 uppercase tracking-widest text-right">Valor</th>
-                <th className="p-6 text-[10px] font-black text-slate-400 uppercase tracking-widest text-center">Ações</th>
+                <th className="p-6 text-xs font-bold text-slate-400">Descrição</th>
+                <th className="p-6 text-xs font-bold text-slate-400 text-center">Tipo</th>
+                <th className="p-6 text-xs font-bold text-slate-400 text-center">Categoria</th>
+                <th className="p-6 text-xs font-bold text-slate-400 text-center">Data</th>
+                <th className="p-6 text-xs font-bold text-slate-400 text-right">Valor</th>
+                <th className="p-6 text-xs font-bold text-slate-400 text-center">Ações</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
               {transacoesFiltradas.map((t) => (
                 <tr key={t.id_transacao} className="hover:bg-slate-50/50 transition-all group">
-                  <td className="p-6 font-bold text-slate-800">{t.descricao}</td>
-                  <td className="p-6 text-center text-[10px] font-bold text-slate-400 uppercase">{parseFloat(t.valor) >= 0 ? 'Entrada' : 'Saída'}</td>
-                  <td className="p-6 text-center"><span className="bg-slate-100 text-slate-500 text-[10px] font-black px-3 py-1 rounded-lg uppercase">{t.nome_categoria}</span></td>
-                  <td className="p-6 text-center text-sm font-bold text-slate-400">{new Date(t.data_transacao).toLocaleDateString('pt-BR')}</td>
-                  <td className={`p-6 text-right font-black ${parseFloat(t.valor) >= 0 ? 'text-emerald-500' : 'text-rose-500'}`}>R$ {Math.abs(parseFloat(t.valor)).toFixed(2)}</td>
+                  <td className="p-6 font-semibold text-slate-800">{t.descricao}</td>
+                  <td className="p-6 text-center text-xs font-medium text-slate-500">{parseFloat(t.valor) >= 0 ? 'Entrada' : 'Saída'}</td>
+                  <td className="p-6 text-center"><span className="bg-slate-100 text-slate-600 text-[10px] font-bold px-3 py-1 rounded-lg">{t.nome_categoria}</span></td>
+                  <td className="p-6 text-center text-sm text-slate-500">{new Date(t.data_transacao).toLocaleDateString('pt-BR')}</td>
+                  <td className={`p-6 text-right font-bold ${parseFloat(t.valor) >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>R$ {Math.abs(parseFloat(t.valor)).toFixed(2)}</td>
                   <td className="p-6 text-center">
-                    <div className="flex justify-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                      <button onClick={() => iniciarEdicao(t)} className="p-2 text-slate-300 hover:text-indigo-600">Editar</button>
-                      <button onClick={() => deletar(t.id_transacao)} className="p-2 text-slate-300 hover:text-red-500">Excluir</button>
+                    <div className="flex justify-center gap-4 opacity-0 group-hover:opacity-100 transition-opacity">
+                      <button onClick={() => iniciarEdicao(t)} className="text-indigo-600 font-bold text-xs hover:underline">Editar</button>
+                      <button onClick={() => deletarTransacao(t.id_transacao)} className="text-red-500 font-bold text-xs hover:underline">Excluir</button>
                     </div>
                   </td>
                 </tr>
@@ -235,16 +202,23 @@ export default function Relatorios() {
         </div>
       </div>
 
+      {/* MODAL DE EDIÇÃO */}
       {editando && (
-        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-md flex items-center justify-center z-50 p-4 text-black">
-          <div className="bg-white w-full max-w-md rounded-[3rem] p-10 shadow-2xl">
-            <h3 className="text-2xl font-bold mb-8 text-slate-800">Editar Lançamento</h3>
-            <form onSubmit={salvarEdicao} className="space-y-5">
-              <input type="text" className="w-full p-5 bg-slate-50 rounded-2xl outline-none font-bold" value={formEdit.descricao} onChange={e => setFormEdit({...formEdit, descricao: e.target.value})} />
-              <input type="number" className="w-full p-5 bg-slate-50 rounded-2xl outline-none font-bold" value={formEdit.valor} onChange={e => setFormEdit({...formEdit, valor: e.target.value})} />
-              <div className="flex gap-4 pt-6">
-                <button type="button" onClick={() => setEditando(null)} className="flex-1 font-bold text-slate-400">Cancelar</button>
-                <button type="submit" className="flex-1 py-4 font-bold bg-indigo-600 text-white rounded-2xl">Salvar</button>
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="bg-white w-full max-w-md rounded-[2.5rem] p-10 shadow-2xl">
+            <h3 className="text-xl font-bold mb-6 text-slate-800">Editar Lançamento</h3>
+            <form onSubmit={salvarEdicao} className="space-y-4">
+              <div className="space-y-1">
+                <label className="text-[10px] font-bold text-slate-400 uppercase ml-1">Descrição</label>
+                <input type="text" className="w-full p-4 bg-slate-50 rounded-xl outline-none font-semibold border border-slate-100" value={formEdit.descricao} onChange={e => setFormEdit({...formEdit, descricao: e.target.value})} />
+              </div>
+              <div className="space-y-1">
+                <label className="text-[10px] font-bold text-slate-400 uppercase ml-1">Valor (R$)</label>
+                <input type="number" className="w-full p-4 bg-slate-50 rounded-xl outline-none font-semibold border border-slate-100" value={formEdit.valor} onChange={e => setFormEdit({...formEdit, valor: e.target.value})} />
+              </div>
+              <div className="flex gap-3 pt-4">
+                <button type="button" onClick={() => setEditando(null)} className="flex-1 py-4 font-bold text-slate-400 hover:text-slate-600">Cancelar</button>
+                <button type="submit" className="flex-1 py-4 font-bold bg-indigo-600 text-white rounded-xl shadow-lg shadow-indigo-100 hover:bg-indigo-700">Salvar</button>
               </div>
             </form>
           </div>

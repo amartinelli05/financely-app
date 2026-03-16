@@ -235,27 +235,37 @@ const deletarTransacao = async (id) => {
 // 2. ROTA PARA EDITAR TRANSAÇÃO (PUT)
 app.put('/editar-transacao/:id', async (req, res) => {
   const { id } = req.params;
+  // Pegamos os nomes exatamente como costumam vir do formulário
   const { descricao, valor, id_categoria, data_transacao } = req.body;
-  
-  console.log("Tentando editar transação ID:", id, "Dados:", req.body);
 
   try {
-    // IMPORTANTE: Verifique se o nome da coluna no seu banco é id_transacao
-    const resultado = await pool.query(
+    // 1. Primeiro, vamos ver se a transação existe e pegar os dados atuais
+    const transacaoAtual = await pool.query('SELECT * FROM transacoes WHERE id_transacao = $1', [id]);
+    
+    if (transacaoAtual.rows.length === 0) {
+      return res.status(404).json({ erro: "Transação não encontrada." });
+    }
+
+    const atual = transacaoAtual.rows[0];
+
+    // 2. Usamos o valor novo OU o que já estava no banco (caso venha vazio)
+    const novaDesc = descricao || atual.descricao;
+    const novoValor = valor !== undefined ? valor : atual.valor;
+    const novaCat = id_categoria || atual.id_categoria;
+    const novaData = data_transacao || atual.data_transacao;
+
+    // 3. Executamos o Update
+    await pool.query(
       `UPDATE transacoes 
        SET descricao = $1, valor = $2, id_categoria = $3, data_transacao = $4 
        WHERE id_transacao = $5`,
-      [descricao, valor, id_categoria, data_transacao, id]
+      [novaDesc, novoValor, novaCat, novaData, id]
     );
 
-    if (resultado.rowCount === 0) {
-      return res.status(404).json({ erro: "Transação não encontrada no banco." });
-    }
-
-    res.json({ mensagem: "Transação atualizada com sucesso!" });
+    res.json({ mensagem: "Atualizado com sucesso!" });
   } catch (err) {
-    console.error("ERRO NO BANCO:", err.message);
-    res.status(500).json({ erro: "Erro no servidor: " + err.message });
+    console.error("ERRO NO UPDATE:", err.message);
+    res.status(500).json({ erro: "Erro ao salvar no banco: " + err.message });
   }
 });
 

@@ -4,7 +4,7 @@
   "description": "Projeto ABEX - Financely",
   "main": "index.js",
   "scripts": {
-    "dev": "concurrently \"cd backend && node index.js\" \"cd frontend && npm run dev\""
+    "dev": "concurrently \"cd backend && npx nodemon index.js\" \"cd frontend && npx next dev\""
   },
   "keywords": [],
   "author": "",

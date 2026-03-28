@@ -268,6 +268,69 @@ app.put('/atualizar-meta/:id', async (req, res) => {
   }
 });
 
+//Rotas das contas
+// Listar contas do usuário
+app.get('/listar-contas', async (req, res) => {
+    const { id_usuario } = req.query;
+    try {
+        const resultado = await pool.query(
+            'SELECT * FROM contas WHERE id_usuario = $1 ORDER BY nome_conta ASC',
+            [id_usuario]
+        );
+        res.json(resultado.rows);
+    } catch (err) {
+        res.status(500).json({ error: 'Erro ao buscar contas' });
+    }
+});
+
+// Cadastrar nova conta
+app.post('/cadastrar-conta', async (req, res) => {
+    const { id_usuario, nome_conta, saldo_inicial, numero_conta, agencia, tipo_conta } = req.body;
+    try {
+        const novaConta = await pool.query(
+            'INSERT INTO contas (id_usuario, nome_conta, saldo_inicial, numero_conta, agencia, tipo_conta) VALUES ($1, $2, $3, $4, $5, $6) RETURNING *',
+            [id_usuario, nome_conta, saldo_inicial, numero_conta, agencia, tipo_conta]
+        );
+        res.status(201).json(novaConta.rows[0]);
+    } catch (err) {
+        res.status(500).json({ error: 'Erro ao cadastrar conta' });
+    }
+});
+
+// Rota para EXCLUIR conta
+app.delete('/excluir-conta/:id', async (req, res) => {
+    const { id } = req.params;
+    try {
+        // 1. Tenta deletar direto. Se houver erro de chave estrangeira, o catch vai pegar.
+        await pool.query('DELETE FROM contas WHERE id_conta = $1', [id]);
+        res.json({ message: 'Conta excluída com sucesso!' });
+    } catch (err) {
+        // Se o erro for código 23503, significa que existem lançamentos presos a essa conta
+        if (err.code === '23503') {
+            return res.status(400).json({ 
+                error: 'Não é possível excluir: esta conta possui lançamentos ou metas vinculadas.' 
+            });
+        }
+        console.error("Erro completo do banco:", err);
+        res.status(500).json({ error: 'Erro interno ao excluir conta.' });
+    }
+});
+
+// Rota para EDITAR conta
+app.put('/editar-conta/:id', async (req, res) => {
+    const { id } = req.params;
+    const { nome_conta, saldo_inicial, tipo_conta, agencia, numero_conta } = req.body;
+    try {
+        const resultado = await pool.query(
+            'UPDATE contas SET nome_conta = $1, saldo_inicial = $2, tipo_conta = $3, agencia = $4, numero_conta = $5 WHERE id_conta = $6 RETURNING *',
+            [nome_conta, saldo_inicial, tipo_conta, agencia, numero_conta, id]
+        );
+        res.json(resultado.rows[0]);
+    } catch (err) {
+        res.status(500).json({ error: 'Erro ao atualizar conta.' });
+    }
+});
+
 // ROTA DE ADMIN COM TRAVA DE SEGURANÇA
 app.get('/admin-stats', async (req, res) => {
   const { senha } = req.query;

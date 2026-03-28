@@ -4,30 +4,38 @@ import { useState, useEffect } from 'react'
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000';
 
 export default function Lancamentos() {
-  const [tipo, setTipo] = useState('saida')
+  const [tipo, setTipo] = useState('saida') 
   const [mostrarNovaCat, setMostrarNovaCat] = useState(false)
   
   const [categorias, setCategorias] = useState([])
+  const [contas, setContas] = useState([]) 
   const [valor, setValor] = useState('')
   const [data, setData] = useState(new Date().toISOString().split('T')[0])
   const [idCategoria, setIdCategoria] = useState('')
+  const [idConta, setIdConta] = useState('') 
   const [novaCategoria, setNovaCategoria] = useState('')
   const [descricao, setDescricao] = useState('')
 
-  const carregarCategorias = async () => {
+  const carregarDados = async () => {
     const idUsuario = localStorage.getItem('usuarioId');
     try {
-      // AJUSTADO: URL Dinâmica
-      const res = await fetch(`${API_URL}/listar-categorias?id_usuario=${idUsuario}`);
-      const dados = await res.json();
-      setCategorias(Array.isArray(dados) ? dados : []);
+      const [resCat, resContas] = await Promise.all([
+        fetch(`${API_URL}/listar-categorias?id_usuario=${idUsuario}`),
+        fetch(`${API_URL}/listar-contas?id_usuario=${idUsuario}`)
+      ]);
+      
+      const dadosCat = await resCat.json();
+      const dadosContas = await resContas.json();
+      
+      setCategorias(Array.isArray(dadosCat) ? dadosCat : []);
+      setContas(Array.isArray(dadosContas) ? dadosContas : []);
     } catch (err) { 
-      console.error("Erro ao carregar categorias:", err) 
+      console.error("Erro ao carregar dados:", err) 
     }
   }
 
   useEffect(() => {
-    carregarCategorias()
+    carregarDados()
   }, [])
 
   const salvar = async (e) => {
@@ -41,10 +49,14 @@ export default function Lancamentos() {
         return
       }
 
+      if (!idConta) {
+        alert("Selecione uma conta para este lançamento!")
+        return
+      }
+
       let categoriaParaSalvar = idCategoria
 
       if (mostrarNovaCat && novaCategoria) {
-        // AJUSTADO: URL Dinâmica
         const resCat = await fetch(`${API_URL}/categorias`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -66,12 +78,12 @@ export default function Lancamentos() {
         descricao,
         valor: parseFloat(valor),
         id_categoria: parseInt(categoriaParaSalvar),
+        id_conta: parseInt(idConta),
         data_transacao: data,
-        tipo: tipo,
+        tipo_movimento: tipo === 'entrada' ? 'Entrada' : 'Saída', 
         id_usuario: parseInt(idUsuario)
       }
 
-      // AJUSTADO: URL Dinâmica
       const res = await fetch(`${API_URL}/nova-transacao`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -79,12 +91,14 @@ export default function Lancamentos() {
       })
 
       if (res.ok) {
-        alert("🚀 Lançamento realizado com sucesso!")
+        alert("🚀 Lançamento realizado e saldo atualizado!")
         setDescricao('')
         setValor('')
+        setIdConta('')
+        setIdCategoria('')
         setNovaCategoria('')
         setMostrarNovaCat(false)
-        carregarCategorias()
+        carregarDados() 
       } else {
         const erroJson = await res.json()
         alert("Erro ao salvar: " + (erroJson.erro || "Verifique os dados."))
@@ -139,6 +153,22 @@ export default function Lancamentos() {
                 className="w-full p-5 bg-slate-50 border border-slate-100 rounded-2xl outline-none focus:ring-2 focus:ring-indigo-600/20 transition-all font-bold text-slate-600" 
               />
             </div>
+          </div>
+
+          <div className="space-y-2">
+            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-2">Conta (Origem/Destino)</label>
+            <select 
+              required value={idConta}
+              onChange={(e) => setIdConta(e.target.value)}
+              className="w-full p-5 bg-slate-50 border border-slate-100 rounded-2xl outline-none focus:ring-2 focus:ring-indigo-600/20 transition-all font-bold text-slate-600 appearance-none"
+            >
+              <option value="">Selecione a conta...</option>
+              {contas.map(conta => (
+                <option key={conta.id_conta} value={conta.id_conta}>
+                  {conta.nome_conta}
+                </option>
+              ))}
+            </select>
           </div>
 
           <div className="space-y-2">

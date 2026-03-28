@@ -9,7 +9,6 @@ const app = express();
 const port = 3000;
 const SECRET_KEY = process.env.JWT_SECRET || "sua_chave_secreta_aqui";
 
-// Configuração do CORS para permitir a comunicação entre as portas 3001 e 3000
 app.use(cors({
   origin: '*',
   methods: ['GET', 'POST', 'PUT', 'DELETE'],
@@ -22,7 +21,6 @@ const pool = new Pool({
   ssl: { rejectUnauthorized: false }
 });
 
-// Teste de conexão
 pool.connect((err) => {
   if (err) return console.error('❌ ERRO NO NEON:', err.stack);
   console.log('✅ CONEXÃO COM POSTGRES (NEON) ESTABELECIDA!');
@@ -40,7 +38,6 @@ app.post('/registrar', async (req, res) => {
     );
     res.status(201).json({ mensagem: "Usuário criado!", id: result.rows[0].id_usuario });
   } catch (err) {
-    console.error(err); // Isso vai aparecer no log do Render
     res.status(500).json({ erro: "Erro no banco de dados: " + err.message });
   }
 });
@@ -50,20 +47,12 @@ app.post('/login', async (req, res) => {
     const email = req.body.email ? req.body.email.trim() : "";
     const senha = req.body.senha ? req.body.senha.trim() : "";
     const result = await pool.query('SELECT * FROM usuarios WHERE email = $1', [email]);
-
     if (result.rows.length === 0) return res.status(401).json({ erro: "Usuário não encontrado." });
-
     const usuario = result.rows[0];
     const senhaCorreta = await bcrypt.compare(senha, usuario.senha);
-
     if (senhaCorreta) {
       const token = jwt.sign({ id: usuario.id_usuario }, SECRET_KEY, { expiresIn: '24h' });
-      res.json({ 
-        auth: true, 
-        token, 
-        id_usuario: usuario.id_usuario, 
-        nome: usuario.nome 
-      });
+      res.json({ auth: true, token, id_usuario: usuario.id_usuario, nome: usuario.nome });
     } else {
       res.status(401).json({ erro: "Senha incorreta." });
     }
@@ -72,17 +61,17 @@ app.post('/login', async (req, res) => {
   }
 });
 
-// --- TRANSAÇÕES (FILTRADAS) ---
+// --- TRANSAÇÕES (LISTAR E CRIAR COM SALDO AUTOMÁTICO) ---
 
 app.get('/listar-transacoes', async (req, res) => {
   const { id_usuario } = req.query;
   if (!id_usuario) return res.status(400).json({ erro: "Usuário não identificado." });
-
   try {
     const query = `
-      SELECT t.*, c.nome_categoria 
+      SELECT t.*, c.nome_categoria, co.nome_conta 
       FROM transacoes t 
       LEFT JOIN categorias c ON t.id_categoria = c.id_categoria
+      LEFT JOIN contas co ON t.id_conta = co.id_conta
       WHERE t.id_usuario = $1
       ORDER BY t.data_transacao DESC
     `;
@@ -94,325 +83,232 @@ app.get('/listar-transacoes', async (req, res) => {
 });
 
 app.post('/nova-transacao', async (req, res) => {
-  const { id_categoria, valor, descricao, data_transacao, tipo, id_usuario } = req.body;
+  const { id_categoria, id_conta, valor, descricao, data_transacao, tipo_movimento, id_usuario } = req.body;
   
-  if (!id_usuario) return res.status(400).json({ erro: "ID do usuário é obrigatório." });
-
-  const tipoFormatado = tipo.toLowerCase().trim() === 'saida' ? 'Saída' : 'Entrada';
-  const valorFinal = tipoFormatado === 'Saída' ? -Math.abs(valor) : Math.abs(valor);
-
+  const client = await pool.connect(); 
   try {
-    const query = `
-      INSERT INTO transacoes (id_categoria, valor, descricao, data_transacao, tipo_movimento, id_usuario) 
-      VALUES ($1, $2, $3, $4, $5, $6) RETURNING *
-    `;
-    const result = await pool.query(query, [id_categoria, valorFinal, descricao, data_transacao, tipoFormatado, id_usuario]);
-    res.status(201).json(result.rows[0]);
+    await client.query('BEGIN');
+
+    // 1. Registra a transação na tabela de transações
+    const novaTransacao = await client.query(
+      `INSERT INTO transacoes (id_categoria, id_conta, valor, descricao, data_transacao, tipo_movimento, id_usuario) 
+       VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *`,
+      [id_categoria, id_conta, valor, descricao, data_transacao, tipo_movimento, id_usuario]
+    );
+
+    // 2. Calcula o ajuste (se for Entrada soma, se for Saída subtrai)
+    const valorAjuste = tipo_movimento === 'Entrada' ? Math.abs(valor) : -Math.abs(valor);
+
+    // 3. ATUALIZA APENAS O SALDO_ATUAL (O inicial continua intacto)
+    await client.query(
+      'UPDATE contas SET saldo_atual = saldo_atual + $1 WHERE id_conta = $2',
+      [valorAjuste, id_conta]
+    );
+
+    await client.query('COMMIT');
+    res.status(201).json(novaTransacao.rows[0]);
   } catch (err) {
-    res.status(500).json({ erro: err.message });
+    await client.query('ROLLBACK');
+    console.error("Erro na transação:", err);
+    res.status(500).json({ erro: "Erro ao processar lançamento e atualizar saldo atual." });
+  } finally {
+    client.release();
+  }
+});
+
+// --- EDITAR E EXCLUIR TRANSAÇÃO ---
+
+app.delete('/deletar-transacao/:id', async (req, res) => {
+  const { id } = req.params;
+  try {
+    const resultado = await pool.query('DELETE FROM transacoes WHERE id_transacao = $1', [id]);
+    if (resultado.rowCount === 0) return res.status(404).json({ erro: "Transação não encontrada." });
+    res.json({ mensagem: "Excluído com sucesso!" });
+  } catch (err) {
+    res.status(500).json({ erro: "Erro ao deletar no servidor." });
+  }
+});
+
+app.put('/editar-transacao/:id', async (req, res) => {
+  const { id } = req.params;
+  const { descricao, valor, id_categoria, data_transacao, tipo_movimento } = req.body;
+  try {
+    const atualRes = await pool.query('SELECT * FROM transacoes WHERE id_transacao = $1', [id]);
+    if (atualRes.rows.length === 0) return res.status(404).json({ erro: "Transação não encontrada." });
+    const atual = atualRes.rows[0];
+    await pool.query(
+      `UPDATE transacoes SET descricao = $1, valor = $2, id_categoria = $3, data_transacao = $4, tipo_movimento = $5 WHERE id_transacao = $6`,
+      [descricao || atual.descricao, valor !== undefined ? valor : atual.valor, id_categoria || atual.id_categoria, data_transacao || atual.data_transacao, tipo_movimento || atual.tipo_movimento, id]
+    );
+    res.json({ mensagem: "Atualizado com sucesso!" });
+  } catch (err) {
+    res.status(500).json({ erro: "Erro ao salvar: " + err.message });
   }
 });
 
 // --- CATEGORIAS ---
 
-// LISTAR CATEGORIAS (Padrão + do Usuário)
 app.get('/listar-categorias', async (req, res) => {
   const { id_usuario } = req.query;
   try {
-    // Busca categorias onde o id_usuario é nulo (padrão) OU é o id do usuário logado
-    const result = await pool.query(
-      'SELECT * FROM categorias WHERE id_usuario IS NULL OR id_usuario = $1 ORDER BY nome_categoria ASC', 
-      [id_usuario]
-    );
+    const result = await pool.query('SELECT * FROM categorias WHERE id_usuario IS NULL OR id_usuario = $1 ORDER BY nome_categoria ASC', [id_usuario]);
     res.json(result.rows);
-  } catch (err) {
-    res.status(500).send(err.message);
-  }
+  } catch (err) { res.status(500).send(err.message); }
 });
 
-// CRIAR CATEGORIA VINCULADA AO USUÁRIO
 app.post('/categorias', async (req, res) => {
   const { nome_categoria, id_usuario } = req.body;
   try {
-    const result = await pool.query(
-      'INSERT INTO categorias (nome_categoria, id_usuario) VALUES ($1, $2) RETURNING id_categoria',
-      [nome_categoria, id_usuario]
-    );
+    const result = await pool.query('INSERT INTO categorias (nome_categoria, id_usuario) VALUES ($1, $2) RETURNING id_categoria', [nome_categoria, id_usuario]);
     res.json(result.rows[0]);
-  } catch (err) {
-    res.status(500).json({ erro: err.message });
-  }
+  } catch (err) { res.status(500).json({ erro: err.message }); }
 });
 
 // --- METAS ---
 
 app.get('/listar-metas', async (req, res) => {
-  const { id_usuario } = req.query; // Pega o id do usuário da URL
+  const { id_usuario } = req.query;
   try {
-    const resultado = await pool.query(
-      'SELECT * FROM metas WHERE id_usuario = $1 ORDER BY id_meta ASC', 
-      [id_usuario]
-    );
+    const resultado = await pool.query('SELECT * FROM metas WHERE id_usuario = $1 ORDER BY id_meta ASC', [id_usuario]);
     res.json(resultado.rows);
-  } catch (err) {
-    res.status(500).json({ erro: err.message });
-  }
+  } catch (err) { res.status(500).json({ erro: err.message }); }
 });
 
 app.post('/cadastrar-meta', async (req, res) => {
-  const { objetivo, valor_alvo, prazo, id_usuario } = req.body; // Recebe o id_usuario
+  const { objetivo, valor_alvo, prazo, id_usuario } = req.body;
   try {
-    await pool.query(
-      'INSERT INTO metas (objetivo, valor_alvo, prazo, id_usuario) VALUES ($1, $2, $3, $4)',
-      [objetivo, valor_alvo, prazo, id_usuario]
-    );
+    await pool.query('INSERT INTO metas (objetivo, valor_alvo, prazo, id_usuario) VALUES ($1, $2, $3, $4)', [objetivo, valor_alvo, prazo, id_usuario]);
     res.status(201).send('Meta criada!');
-  } catch (err) {
-    res.status(500).json({ erro: err.message });
-  }
+  } catch (err) { res.status(500).json({ erro: err.message }); }
 });
 
-// ROTA PARA DELETAR META
 app.delete('/deletar-meta/:id', async (req, res) => {
   const { id } = req.params;
   try {
     await pool.query('DELETE FROM metas WHERE id_meta = $1', [id]);
     res.json({ mensagem: "Meta excluída com sucesso!" });
-  } catch (err) {
-    res.status(500).json({ erro: err.message });
-  }
+  } catch (err) { res.status(500).json({ erro: err.message }); }
 });
 
-
-// 1. ROTA PARA DELETAR TRANSAÇÃO
-app.delete('/deletar-transacao/:id', async (req, res) => {
-  const { id } = req.params;
-  try {
-    // Executa a ação no banco de dados Neon
-    const resultado = await pool.query('DELETE FROM transacoes WHERE id_transacao = $1', [id]);
-    
-    if (resultado.rowCount === 0) {
-      return res.status(404).json({ erro: "Transação não encontrada." });
-    }
-
-    res.json({ mensagem: "Excluído com sucesso!" });
-  } catch (err) {
-    console.error("Erro no banco:", err.message);
-    res.status(500).json({ erro: "Erro ao deletar no servidor." });
-  }
-});
-
-// 2. ROTA PARA EDITAR TRANSAÇÃO (PUT)
-app.put('/editar-transacao/:id', async (req, res) => {
-  const { id } = req.params;
-  const { descricao, valor, id_categoria, data_transacao, tipo_movimento } = req.body;
-
-  try {
-    // 1. Busca dados atuais para evitar campos nulos
-    const atualRes = await pool.query('SELECT * FROM transacoes WHERE id_transacao = $1', [id]);
-    
-    if (atualRes.rows.length === 0) {
-      return res.status(404).json({ erro: "Transação não encontrada." });
-    }
-
-    const atual = atualRes.rows[0];
-
-    // 2. Define novos valores ou mantém os atuais (fallback)
-    const v_desc = descricao || atual.descricao;
-    const v_valor = valor !== undefined ? valor : atual.valor;
-    const v_cat = id_categoria || atual.id_categoria;
-    const v_data = data_transacao || atual.data_transacao;
-    const v_tipo = tipo_movimento || atual.tipo_movimento;
-
-    // 3. Update respeitando as colunas do seu banco Neon
-    await pool.query(
-      `UPDATE transacoes 
-       SET descricao = $1, valor = $2, id_categoria = $3, data_transacao = $4, tipo_movimento = $5
-       WHERE id_transacao = $6`,
-      [v_desc, v_valor, v_cat, v_data, v_tipo, id]
-    );
-
-    res.json({ mensagem: "Atualizado com sucesso!" });
-  } catch (err) {
-    console.error("ERRO NO BANCO:", err.message);
-    res.status(500).json({ erro: "Erro ao salvar: " + err.message });
-  }
-});
-
-// ROTA PARA ATUALIZAR O VALOR POUPADO DA META
 app.put('/atualizar-meta/:id', async (req, res) => {
   const { id } = req.params;
-  // Alteração aqui: pega o valor e garante que é um número
   const valor_adicional = parseFloat(req.body.valor_adicional); 
-
-  if (isNaN(valor_adicional)) {
-    return res.status(400).json({ erro: "Valor inválido" });
-  }
-
+  if (isNaN(valor_adicional)) return res.status(400).json({ erro: "Valor inválido" });
   try {
-    const query = `
-      UPDATE metas 
-      SET valor_poupado = COALESCE(valor_poupado, 0) + $1 
-      WHERE id_meta = $2 
-      RETURNING *
-    `;
-    const result = await pool.query(query, [valor_adicional, id]);
-    
-    if (result.rows.length > 0) {
-      res.json(result.rows[0]);
-    } else {
-      res.status(404).json({ erro: "Meta não encontrada." });
-    }
-  } catch (err) {
-    res.status(500).json({ erro: err.message });
-  }
+    const result = await pool.query('UPDATE metas SET valor_poupado = COALESCE(valor_poupado, 0) + $1 WHERE id_meta = $2 RETURNING *', [valor_adicional, id]);
+    if (result.rows.length > 0) res.json(result.rows[0]);
+    else res.status(404).json({ erro: "Meta não encontrada." });
+  } catch (err) { res.status(500).json({ erro: err.message }); }
 });
 
-//Rotas das contas
-// Listar contas do usuário
+// --- CONTAS ---
+
 app.get('/listar-contas', async (req, res) => {
-    const { id_usuario } = req.query;
-    try {
-        const resultado = await pool.query(
-            'SELECT * FROM contas WHERE id_usuario = $1 ORDER BY nome_conta ASC',
-            [id_usuario]
-        );
-        res.json(resultado.rows);
-    } catch (err) {
-        res.status(500).json({ error: 'Erro ao buscar contas' });
-    }
+  const { id_usuario } = req.query;
+  try {
+    const resultado = await pool.query('SELECT * FROM contas WHERE id_usuario = $1 ORDER BY nome_conta ASC', [id_usuario]);
+    res.json(resultado.rows);
+  } catch (err) { res.status(500).json({ error: 'Erro ao buscar contas' }); }
 });
 
-// Cadastrar nova conta
 app.post('/cadastrar-conta', async (req, res) => {
     const { id_usuario, nome_conta, saldo_inicial, numero_conta, agencia, tipo_conta } = req.body;
+    
+    // Garantimos que o valor é um número para o banco não dar erro de tipo
+    const valorInicial = parseFloat(saldo_inicial) || 0;
+
     try {
-        const novaConta = await pool.query(
-            'INSERT INTO contas (id_usuario, nome_conta, saldo_inicial, numero_conta, agencia, tipo_conta) VALUES ($1, $2, $3, $4, $5, $6) RETURNING *',
-            [id_usuario, nome_conta, saldo_inicial, numero_conta, agencia, tipo_conta]
-        );
+        // SQL corrigido: Inserindo em saldo_inicial E saldo_atual ao mesmo tempo
+        const query = `
+            INSERT INTO contas (id_usuario, nome_conta, saldo_inicial, saldo_atual, numero_conta, agencia, tipo_conta) 
+            VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *`;
+        
+        const values = [id_usuario, nome_conta, valorInicial, valorInicial, numero_conta, agencia, tipo_conta];
+        
+        const novaConta = await pool.query(query, values);
         res.status(201).json(novaConta.rows[0]);
     } catch (err) {
-        res.status(500).json({ error: 'Erro ao cadastrar conta' });
+        console.error("❌ ERRO NO BANCO AO SALVAR CONTA:", err.message);
+        res.status(500).json({ error: 'Erro interno no banco de dados: ' + err.message });
     }
 });
 
-// Rota para EXCLUIR conta
 app.delete('/excluir-conta/:id', async (req, res) => {
-    const { id } = req.params;
-    try {
-        // 1. Tenta deletar direto. Se houver erro de chave estrangeira, o catch vai pegar.
-        await pool.query('DELETE FROM contas WHERE id_conta = $1', [id]);
-        res.json({ message: 'Conta excluída com sucesso!' });
-    } catch (err) {
-        // Se o erro for código 23503, significa que existem lançamentos presos a essa conta
-        if (err.code === '23503') {
-            return res.status(400).json({ 
-                error: 'Não é possível excluir: esta conta possui lançamentos ou metas vinculadas.' 
-            });
-        }
-        console.error("Erro completo do banco:", err);
-        res.status(500).json({ error: 'Erro interno ao excluir conta.' });
-    }
+  const { id } = req.params;
+  try {
+    await pool.query('DELETE FROM contas WHERE id_conta = $1', [id]);
+    res.json({ message: 'Conta excluída com sucesso!' });
+  } catch (err) {
+    if (err.code === '23503') return res.status(400).json({ error: 'Não é possível excluir: esta conta possui lançamentos vinculados.' });
+    res.status(500).json({ error: 'Erro interno ao excluir conta.' });
+  }
 });
 
-// Rota para EDITAR conta
+// --- VERSÃO CORRIGIDA DA ROTA DE EDIÇÃO ---
 app.put('/editar-conta/:id', async (req, res) => {
     const { id } = req.params;
     const { nome_conta, saldo_inicial, tipo_conta, agencia, numero_conta } = req.body;
+    
+    const client = await pool.connect();
     try {
-        const resultado = await pool.query(
-            'UPDATE contas SET nome_conta = $1, saldo_inicial = $2, tipo_conta = $3, agencia = $4, numero_conta = $5 WHERE id_conta = $6 RETURNING *',
-            [nome_conta, saldo_inicial, tipo_conta, agencia, numero_conta, id]
+        await client.query('BEGIN');
+
+        // 1. Busca os valores antigos para calcular a diferença
+        const buscaAnterior = await client.query('SELECT saldo_inicial, saldo_atual FROM contas WHERE id_conta = $1', [id]);
+        const antigoInicial = parseFloat(buscaAnterior.rows[0].saldo_inicial);
+        const novoInicial = parseFloat(saldo_inicial);
+
+        // 2. Calcula quanto o saldo inicial mudou
+        const diferenca = novoInicial - antigoInicial;
+
+        // 3. Atualiza a conta: o saldo_inicial vira o novo, 
+        // e o saldo_atual recebe o ajuste da diferença
+        const resultado = await client.query(
+            `UPDATE contas 
+             SET nome_conta = $1, 
+                 saldo_inicial = $2, 
+                 saldo_atual = saldo_atual + $3, 
+                 tipo_conta = $4, 
+                 agencia = $5, 
+                 numero_conta = $6 
+             WHERE id_conta = $7 RETURNING *`,
+            [nome_conta, novoInicial, diferenca, tipo_conta, agencia, numero_conta, id]
         );
+
+        await client.query('COMMIT');
         res.json(resultado.rows[0]);
     } catch (err) {
-        res.status(500).json({ error: 'Erro ao atualizar conta.' });
+        await client.query('ROLLBACK');
+        console.error(err);
+        res.status(500).json({ error: 'Erro ao atualizar saldo inicial e ajustar saldo atual.' });
+    } finally {
+        client.release();
     }
 });
 
-// ROTA DE ADMIN COM TRAVA DE SEGURANÇA
+// --- ADMIN HUB ---
+
 app.get('/admin-stats', async (req, res) => {
   const { senha } = req.query;
-  
-  // Trava de segurança
-  if (senha !== 'financely-2026') {
-    return res.status(403).send(`
-      <div style="font-family:sans-serif; text-align:center; margin-top:100px;">
-        <h1 style="color:#ef4444;">🚫 Acesso Negado</h1>
-        <p style="color:#64748b;">Chave de administrador inválida.</p>
-      </div>
-    `);
-  }
-
+  if (senha !== 'financely-2026') return res.status(403).send('<div style="font-family:sans-serif; text-align:center; margin-top:100px;"><h1 style="color:#ef4444;">🚫 Acesso Negado</h1></div>');
   try {
-    // Busca os dados reais no seu Neon
     const totalU = await pool.query('SELECT COUNT(*) FROM usuarios');
     const totalT = await pool.query('SELECT COUNT(*) FROM transacoes');
     const totalM = await pool.query('SELECT COUNT(*) FROM metas');
     const recentes = await pool.query('SELECT nome, email FROM usuarios ORDER BY id_usuario DESC LIMIT 5');
-
-    // Retorna o HTML formatado
     res.send(`
       <!DOCTYPE html>
       <html lang="pt-br">
-      <head>
-          <meta charset="UTF-8">
-          <meta name="viewport" content="width=device-width, initial-scale=1.0">
-          <title>Admin Hub | Financely</title>
-      </head>
-      <body style="font-family: -apple-system, system-ui, sans-serif; padding: 40px; background: #f8fafc; color: #1e293b; margin: 0;">
-        <div style="max-width: 900px; margin: 0 auto;">
-          <header style="display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid #e2e8f0; padding-bottom: 20px; margin-bottom: 30px;">
-            <h1 style="margin: 0; font-size: 24px; font-weight: 800;">📊 Financely <span style="color:#6366f1">Admin Hub</span></h1>
-            <span style="background: #dcfce7; color: #166534; padding: 5px 12px; border-radius: 20px; font-size: 12px; font-weight: bold;">● Sistema Online</span>
-          </header>
-          
-          <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 20px;">
-            <div style="background: white; padding: 25px; border-radius: 20px; box-shadow: 0 10px 15px -3px rgba(0,0,0,0.1); border-top: 4px solid #6366f1;">
-              <p style="color: #64748b; font-size: 11px; font-weight: 800; text-transform: uppercase; margin: 0 0 10px 0;">Total Usuários</p>
-              <h2 style="font-size: 36px; margin: 0;">${totalU.rows[0].count}</h2>
-            </div>
-            <div style="background: white; padding: 25px; border-radius: 20px; box-shadow: 0 10px 15px -3px rgba(0,0,0,0.1); border-top: 4px solid #10b981;">
-              <p style="color: #64748b; font-size: 11px; font-weight: 800; text-transform: uppercase; margin: 0 0 10px 0;">Total Lançamentos</p>
-              <h2 style="font-size: 36px; margin: 0;">${totalT.rows[0].count}</h2>
-            </div>
-            <div style="background: white; padding: 25px; border-radius: 20px; box-shadow: 0 10px 15px -3px rgba(0,0,0,0.1); border-top: 4px solid #f59e0b;">
-              <p style="color: #64748b; font-size: 11px; font-weight: 800; text-transform: uppercase; margin: 0 0 10px 0;">Metas Criadas</p>
-              <h2 style="font-size: 36px; margin: 0;">${totalM.rows[0].count}</h2>
-            </div>
-          </div>
-
-          <h3 style="margin: 40px 0 20px 0; font-size: 18px;">👤 Últimos Usuários Cadastrados</h3>
-          <div style="background: white; border-radius: 20px; overflow: hidden; box-shadow: 0 10px 15px -3px rgba(0,0,0,0.1);">
-            <table style="width: 100%; border-collapse: collapse; text-align: left;">
-              <thead>
-                <tr style="background: #f1f5f9;">
-                  <th style="padding: 15px 20px; font-size: 13px; color: #475569;">NOME</th>
-                  <th style="padding: 15px 20px; font-size: 13px; color: #475569;">E-MAIL</th>
-                </tr>
-              </thead>
-              <tbody>
-                ${recentes.rows.map(u => `
-                  <tr style="border-bottom: 1px solid #f1f5f9;">
-                    <td style="padding: 15px 20px; font-weight: 600; font-size: 14px;">${u.nome}</td>
-                    <td style="padding: 15px 20px; color: #64748b; font-size: 14px;">${u.email}</td>
-                  </tr>
-                `).join('')}
-              </tbody>
-            </table>
-          </div>
-          
-          <footer style="margin-top: 30px; text-align: center;">
-            <p style="font-size: 12px; color: #94a3b8;">Dashboard Gerado em ${new Date().toLocaleString('pt-BR')} (Horário de Brasília)</p>
-          </footer>
-        </div>
+      <body style="font-family: sans-serif; padding: 40px; background: #f8fafc;">
+        <h1>📊 Financely Admin Hub</h1>
+        <p>Usuários: ${totalU.rows[0].count} | Lançamentos: ${totalT.rows[0].count} | Metas: ${totalM.rows[0].count}</p>
+        <hr>
+        <h3>Últimos Usuários</h3>
+        <ul>${recentes.rows.map(u => `<li>${u.nome} (${u.email})</li>`).join('')}</ul>
       </body>
       </html>
     `);
-  } catch (err) {
-    res.status(500).send("Erro ao carregar os dados do banco.");
-  }
+  } catch (err) { res.status(500).send("Erro ao carregar dados."); }
 });
 
 app.listen(port, () => {

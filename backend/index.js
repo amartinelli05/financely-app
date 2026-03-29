@@ -6,7 +6,6 @@ const jwt = require('jsonwebtoken');
 require('dotenv').config();
 
 const app = express();
-const port = process.env.PORT || 3000;
 const SECRET_KEY = process.env.JWT_SECRET || "sua_chave_secreta_aqui";
 
 app.use(cors({
@@ -16,14 +15,25 @@ app.use(cors({
 }));
 app.use(express.json());
 
+// --- CONFIGURAÇÃO DO BANCO (UNIFICADA E ESTÁVEL) ---
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
-  ssl: { rejectUnauthorized: false }
+  ssl: { rejectUnauthorized: false },
+  idleTimeoutMillis: 30000,
+  connectionTimeoutMillis: 2000,
+  max: 10
 });
 
-pool.connect((err) => {
-  if (err) return console.error('❌ ERRO NO NEON:', err.stack);
+pool.on('error', (err) => {
+  console.error('❌ Erro inesperado no cliente do banco:', err);
+});
+
+pool.connect((err, client, release) => {
+  if (err) {
+    return console.error('❌ ERRO AO CONECTAR NO NEON:', err.stack);
+  }
   console.log('✅ CONEXÃO COM POSTGRES (NEON) ESTABELECIDA!');
+  release();
 });
 
 // --- 1. AUTENTICAÇÃO ---
@@ -118,7 +128,6 @@ app.delete('/deletar-transacao/:id', async (req, res) => {
     const id_conta = transacaoRes.rows[0].id_conta;
     await client.query('DELETE FROM transacoes WHERE id_transacao = $1', [id]);
     
-    // Recalculo total pós-delete
     const somaRes = await client.query('SELECT SUM(valor) as total FROM transacoes WHERE id_conta = $1', [id_conta]);
     const contaRes = await client.query('SELECT saldo_inicial FROM contas WHERE id_conta = $1', [id_conta]);
     const novoSaldo = (parseFloat(contaRes.rows[0].saldo_inicial) || 0) + (parseFloat(somaRes.rows[0].total) || 0);
@@ -271,9 +280,8 @@ app.get('/admin-stats', async (req, res) => {
   } catch (err) { res.status(500).send("Erro."); }
 });
 
-// --- 6. INICIALIZAÇÃO DO SERVIDOR ---
 
-// Remova a duplicidade e deixe apenas este bloco:
+// --- 6. INICIALIZAÇÃO DO SERVIDOR ---
 const PORT_FINAL = process.env.PORT || 3000;
 
 app.listen(PORT_FINAL, '0.0.0.0', () => {

@@ -169,22 +169,61 @@ app.put('/editar-transacao/:id', async (req, res) => {
   } finally { client.release(); }
 });
 
-// --- 3. CATEGORIAS ---
+// --- 3. CATEGORIAS (LISTAR, CRIAR, EDITAR E EXCLUIR) ---
 
+// Listar categorias do sistema (NULL) e as do usuário
 app.get('/listar-categorias', async (req, res) => {
   const { id_usuario } = req.query;
   try {
-    const result = await pool.query('SELECT * FROM categorias WHERE id_usuario IS NULL OR id_usuario = $1 ORDER BY nome_categoria ASC', [id_usuario]);
+    const result = await pool.query(
+      'SELECT * FROM categorias WHERE id_usuario IS NULL OR id_usuario = $1 ORDER BY nome_categoria ASC', 
+      [id_usuario]
+    );
     res.json(result.rows);
-  } catch (err) { res.status(500).send(err.message); }
+  } catch (err) { res.status(500).json({ erro: err.message }); }
 });
 
+// Criar nova categoria
 app.post('/categorias', async (req, res) => {
   const { nome_categoria, id_usuario } = req.body;
   try {
-    const result = await pool.query('INSERT INTO categorias (nome_categoria, id_usuario) VALUES ($1, $2) RETURNING id_categoria', [nome_categoria, id_usuario]);
+    const result = await pool.query(
+      'INSERT INTO categorias (nome_categoria, id_usuario) VALUES ($1, $2) RETURNING *', 
+      [nome_categoria, id_usuario]
+    );
     res.json(result.rows[0]);
   } catch (err) { res.status(500).json({ erro: err.message }); }
+});
+
+// EDITAR CATEGORIA (Nova)
+app.put('/editar-categoria/:id', async (req, res) => {
+  const { id } = req.params;
+  const { nome_categoria } = req.body;
+  try {
+    const result = await pool.query(
+      'UPDATE categorias SET nome_categoria = $1 WHERE id_categoria = $2 RETURNING *',
+      [nome_categoria, id]
+    );
+    res.json(result.rows[0]);
+  } catch (err) { res.status(500).json({ erro: err.message }); }
+});
+
+// EXCLUIR CATEGORIA (Com a trava de segurança)
+app.delete('/excluir-categoria/:id', async (req, res) => {
+  const { id } = req.params;
+  try {
+    // O banco de dados vai verificar automaticamente se existe id_categoria na tabela transacoes
+    await pool.query('DELETE FROM categorias WHERE id_categoria = $1', [id]);
+    res.json({ mensagem: "Categoria excluída com sucesso!" });
+  } catch (err) {
+    // Código 23503: Violação de chave estrangeira (tem transação usando essa categoria)
+    if (err.code === '23503') {
+      return res.status(400).json({ 
+        erro: "Não é possível excluir: existem lançamentos usando esta categoria." 
+      });
+    }
+    res.status(500).json({ erro: "Erro ao excluir categoria: " + err.message });
+  }
 });
 
 // --- 4. CONTAS ---

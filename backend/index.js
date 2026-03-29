@@ -271,6 +271,11 @@ app.get('/admin-stats', async (req, res) => {
   } catch (err) { res.status(500).send("Erro."); }
 });
 
-app.listen(port, () => {
-  console.log(`🚀 Financely online na porta ${port}`);
+// --- 6. INICIALIZAÇÃO DO SERVIDOR ---
+
+// Remova a duplicidade e deixe apenas este bloco:
+const PORT_FINAL = process.env.PORT || 3000;
+
+app.listen(PORT_FINAL, '0.0.0.0', () => {
+  console.log(`🚀 Financely online na porta ${PORT_FINAL}`);
 });

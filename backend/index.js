@@ -287,9 +287,41 @@ app.get('/listar-metas', async (req, res) => {
 app.post('/cadastrar-meta', async (req, res) => {
   const { objetivo, valor_alvo, prazo, id_usuario } = req.body;
   try {
-    await pool.query('INSERT INTO metas (objetivo, valor_alvo, prazo, id_usuario) VALUES ($1, $2, $3, $4)', [objetivo, valor_alvo, prazo, id_usuario]);
+    // Adicionado valor_poupado = 0 como padrão no insert
+    await pool.query(
+      'INSERT INTO metas (objetivo, valor_alvo, prazo, id_usuario, valor_poupado) VALUES ($1, $2, $3, $4, 0)', 
+      [objetivo, valor_alvo, prazo, id_usuario]
+    );
     res.status(201).send('Meta criada!');
   } catch (err) { res.status(500).json({ erro: err.message }); }
+});
+
+// NOVA ROTA: Editar os dados principais da meta
+app.put('/editar-meta/:id', async (req, res) => {
+  const { id } = req.params;
+  const { objetivo, valor_alvo, prazo } = req.body;
+  try {
+    await pool.query(
+      'UPDATE metas SET objetivo = $1, valor_alvo = $2, prazo = $3 WHERE id_meta = $4',
+      [objetivo, valor_alvo, prazo, id]
+    );
+    res.json({ mensagem: "Meta atualizada com sucesso!" });
+  } catch (err) { res.status(500).json({ erro: err.message }); }
+});
+
+// MANTIDA E MELHORADA: Rota para "Dar Saída" (adicionar valor à poupança da meta)
+app.put('/atualizar-meta/:id', async (req, res) => {
+  const { id } = req.params;
+  const { valor_adicional } = req.body; 
+  try {
+    const result = await pool.query(
+      'UPDATE metas SET valor_poupado = COALESCE(valor_poupado, 0) + $1 WHERE id_meta = $2 RETURNING *', 
+      [parseFloat(valor_adicional), id]
+    );
+    res.json(result.rows[0]);
+  } catch (err) {
+    res.status(500).json({ erro: "Erro ao atualizar meta." });
+  }
 });
 
 app.delete('/deletar-meta/:id', async (req, res) => {
@@ -297,15 +329,6 @@ app.delete('/deletar-meta/:id', async (req, res) => {
   try {
     await pool.query('DELETE FROM metas WHERE id_meta = $1', [id]);
     res.json({ mensagem: "Meta excluída!" });
-  } catch (err) { res.status(500).json({ erro: err.message }); }
-});
-
-app.put('/atualizar-meta/:id', async (req, res) => {
-  const { id } = req.params;
-  const valor_adicional = parseFloat(req.body.valor_adicional); 
-  try {
-    const result = await pool.query('UPDATE metas SET valor_poupado = COALESCE(valor_poupado, 0) + $1 WHERE id_meta = $2 RETURNING *', [valor_adicional, id]);
-    res.json(result.rows[0]);
   } catch (err) { res.status(500).json({ erro: err.message }); }
 });
 

@@ -54,8 +54,8 @@ export default function Lancamentos() {
         return
       }
 
+      // --- LOGICA DE CATEGORIA (Mantida) ---
       let categoriaParaSalvar = idCategoria
-
       if (mostrarNovaCat && novaCategoria) {
         const resCat = await fetch(`${API_URL}/categorias`, {
           method: 'POST',
@@ -74,9 +74,13 @@ export default function Lancamentos() {
         return
       }
 
+      // --- CORREÇÃO AQUI: AJUSTE DO VALOR PARA NEGATIVO SE FOR SAÍDA ---
+      const valorNumerico = Math.abs(parseFloat(valor)); // Garante que o número base seja positivo
+      const valorFinal = tipo === 'saida' ? valorNumerico * -1 : valorNumerico;
+
       const dadosTransacao = {
         descricao,
-        valor: parseFloat(valor),
+        valor: valorFinal, // Agora vai negativo para o banco se for Saída
         id_categoria: parseInt(categoriaParaSalvar),
         id_conta: parseInt(idConta),
         data_transacao: data,
@@ -91,7 +95,8 @@ export default function Lancamentos() {
       })
 
       if (res.ok) {
-        alert("🚀 Lançamento realizado e saldo atualizado!")
+        alert("🚀 Lançamento realizado!")
+        // Limpeza dos campos
         setDescricao('')
         setValor('')
         setIdConta('')

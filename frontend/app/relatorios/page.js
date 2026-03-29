@@ -6,82 +6,55 @@ const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000';
 export default function Relatorios() {
   const [transacoes, setTransacoes] = useState([])
   const [categorias, setCategorias] = useState([])
+  const [contas, setContas] = useState([])
   const [filtroTexto, setFiltroTexto] = useState('')
   const [filtroCategoria, setFiltroCategoria] = useState('')
+  const [filtroConta, setFiltroConta] = useState('')
   const [editando, setEditando] = useState(null)
+  const [isClient, setIsClient] = useState(false) 
+
   const [formEdit, setFormEdit] = useState({ 
-    descricao: '', 
-    valor: '', 
-    id_categoria: '', 
-    data_transacao: '',
-    tipo_movimento: '' 
+    descricao: '', valor: '', id_categoria: '', data_transacao: '', tipo_movimento: '' 
   })
+
+  useEffect(() => { setIsClient(true) }, [])
 
   const carregarDados = async () => {
     try {
       const idUsuario = localStorage.getItem('usuarioId')
       if (!idUsuario) return
 
-      const resT = await fetch(`${API_URL}/listar-transacoes?id_usuario=${idUsuario}`)
-      const dadosT = await resT.json()
+      const [resT, resC, resContas] = await Promise.all([
+        fetch(`${API_URL}/listar-transacoes?id_usuario=${idUsuario}`),
+        fetch(`${API_URL}/listar-categorias?id_usuario=${idUsuario}`),
+        fetch(`${API_URL}/listar-contas?id_usuario=${idUsuario}`)
+      ])
+
+      const [dadosT, dadosC, dadosContas] = await Promise.all([
+        resT.json(), resC.json(), resContas.json()
+      ])
+
       setTransacoes(Array.isArray(dadosT) ? dadosT : [])
-      
-      const resC = await fetch(`${API_URL}/listar-categorias?id_usuario=${idUsuario}`)
-      const dadosC = await resC.json()
       setCategorias(Array.isArray(dadosC) ? dadosC : [])
+      setContas(Array.isArray(dadosContas) ? dadosContas : [])
     } catch (err) { console.error("Erro ao carregar dados:", err) }
   }
 
   useEffect(() => { carregarDados() }, [])
 
-  // --- FILTRAGEM COMBINADA (CRUCIAL) ---
   const transacoesFiltradas = transacoes.filter(t => {
     const descricaoMatch = t.descricao.toLowerCase().includes(filtroTexto.toLowerCase())
     const categoriaMatch = filtroCategoria === '' || String(t.id_categoria) === String(filtroCategoria)
-    return descricaoMatch && categoriaMatch
+    const contaMatch = filtroConta === '' || String(t.id_conta) === String(filtroConta)
+    return descricaoMatch && categoriaMatch && contaMatch
   })
 
-  // --- EXCLUSÃO ---
-  const deletarTransacao = async (id) => {
-    if (window.confirm("⚠️ Você tem certeza que deseja excluir esta transação?")) {
-      try {
-        const res = await fetch(`${API_URL}/deletar-transacao/${id}`, { method: 'DELETE' })
-        if (res.ok) { carregarDados(); alert("Removido com sucesso!") }
-      } catch (err) { alert("Erro ao deletar.") }
-    }
-  }
+  const entradas = transacoesFiltradas.filter(t => t.valor >= 0).reduce((acc, t) => acc + parseFloat(t.valor), 0);
+  const saidas = transacoesFiltradas.filter(t => t.valor < 0).reduce((acc, t) => acc + Math.abs(t.valor), 0);
+  const saldoLiquido = entradas - saidas;
 
-  // --- EDIÇÃO ---
-  const iniciarEdicao = (t) => {
-    setEditando(t.id_transacao)
-    setFormEdit({ 
-      descricao: t.descricao, 
-      valor: Math.abs(t.valor), 
-      id_categoria: t.id_categoria,
-      data_transacao: t.data_transacao ? t.data_transacao.split('T')[0] : '',
-      tipo_movimento: t.tipo_movimento 
-    })
-  }
-
-  const salvarEdicao = async (e) => {
-    e.preventDefault()
-    if (!window.confirm("Deseja salvar as alterações?")) return;
-
-    try {
-      const res = await fetch(`${API_URL}/editar-transacao/${editando}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(formEdit)
-      })
-      if (res.ok) { 
-        setEditando(null); 
-        carregarDados();
-        alert("Atualizado com sucesso!");
-      }
-    } catch (err) { alert("Erro na conexão.") }
-  }
-
-   const exportarPDF = async () => {
+  // --- FUNÇÕES DE EXPORTAÇÃO ---
+  const exportarPDF = async () => {
   try {
     const { default: jsPDF } = await import('jspdf');
     const { default: autoTable } = await import('jspdf-autotable');
@@ -94,169 +67,207 @@ export default function Relatorios() {
     const doc = new jsPDF();
     const nomeUsuario = localStorage.getItem('usuarioNome') || 'Usuário';
 
-    const config = {
-      colors: {
-        primary: [99, 102, 241],   
-        success: [16, 185, 129],    
-        danger: [244, 63, 94],     
-        slate800: [30, 41, 59],    
-        slate600: [71, 85, 105],   
-        slate500: [100, 116, 139], 
-        slate300: [226, 232, 240], 
-        white: [255, 255, 255],
-      },
-      margins: { left: 14, right: 14, top: 15 },
-      pageWidth: 210,
-    };
+    // Definição de Cores (Arrays RGB puros para evitar o erro f3)
+    const cIndigo = [99, 102, 241];
+    const cEmerald = [16, 185, 129];
+    const cRose = [244, 63, 94];
+    const cSlate800 = [30, 41, 59];
+    const cSlate500 = [100, 116, 139];
+    const cSlate100 = [248, 250, 252];
 
-    // Funções Auxiliares Internas
-    const formatCurrency = (v) => v.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    const formatCurrency = (v) => v.toLocaleString('pt-BR', { minimumFractionDigits: 2 });
     const formatDate = (d) => new Date(d).toLocaleDateString('pt-BR');
 
-    // 1. Cabeçalho Moderno
-    doc.setFillColor(...config.colors.primary).rect(config.margins.left, 15, 2, 12, 'F');
-    doc.setFont("helvetica", "bold").setFontSize(20).setTextColor(...config.colors.slate800).text("Financely", 22, 24);
-    doc.setFontSize(8).setTextColor(...config.colors.slate500).setFont("helvetica", "normal").text(`RELATÓRIO DE: ${nomeUsuario.toUpperCase()}`, 22, 29);
-    doc.text(`${new Date().toLocaleDateString('pt-BR')} • ${new Date().toLocaleTimeString('pt-BR', {hour:'2-digit', minute:'2-digit'})}`, 196, 24, { align: 'right' });
+    // 1. Cabeçalho Minimalista
+    doc.setFillColor(...cIndigo).rect(14, 15, 2, 12, 'F');
+    doc.setFont("helvetica", "bold").setFontSize(22).setTextColor(...cSlate800).text("Financely", 20, 24);
+    doc.setFontSize(8).setTextColor(...cSlate500).setFont("helvetica", "normal")
+       .text(`RELATÓRIO DE MOVIMENTAÇÕES • ${nomeUsuario.toUpperCase()}`, 20, 29);
+    
+    doc.setFontSize(8).text(`${formatDate(new Date())}`, 196, 24, { align: 'right' });
 
-    // 2. Tabela de Transações
+    // 2. Tabela com 5 Colunas Separadas
     autoTable(doc, {
       startY: 40,
-      head: [["DESCRIÇÃO", "CATEGORIA", "DATA", "VALOR (R$)"]],
+      head: [["DESCRIÇÃO", "CATEGORIA", "CONTA", "DATA", "VALOR (R$)"]],
       body: transacoesFiltradas.map(t => [
         t.descricao,
         (t.nome_categoria || 'Geral').toUpperCase(),
+        (t.nome_conta || 'N/A').toUpperCase(),
         formatDate(t.data_transacao),
         `${parseFloat(t.valor) >= 0 ? '+ ' : '- '} ${formatCurrency(Math.abs(t.valor))}`
       ]),
       theme: 'plain',
-      headStyles: { textColor: config.colors.slate600, fontSize: 8, fontStyle: 'bold' },
-      styles: { fontSize: 9, cellPadding: 5, textColor: config.colors.slate800 },
-      columnStyles: { 3: { halign: 'right', fontStyle: 'bold' } },
+      headStyles: { textColor: cSlate500, fontSize: 7, fontStyle: 'bold', cellPadding: 4 },
+      styles: { fontSize: 8, cellPadding: 5, textColor: cSlate800, valign: 'middle' },
+      columnStyles: { 
+        3: { halign: 'center' }, 
+        4: { halign: 'right', fontStyle: 'bold' } 
+      },
       didParseCell: (data) => {
-        if (data.section === 'body' && data.column.index === 3) {
-          data.cell.styles.textColor = data.cell.raw.includes('+') ? config.colors.success : config.colors.danger;
+        if (data.section === 'body' && data.column.index === 4) {
+          data.cell.styles.textColor = data.cell.raw.includes('+') ? cEmerald : cRose;
         }
       },
       didDrawCell: (data) => {
         if (data.section === 'body') {
-          doc.setDrawColor(...config.colors.slate300).setLineWidth(0.1).line(data.cell.x, data.cell.y + data.cell.height, data.cell.x + data.cell.width, data.cell.y + data.cell.height);
+          doc.setDrawColor(241, 245, 249).setLineWidth(0.1).line(data.cell.x, data.cell.y + data.cell.height, data.cell.x + data.cell.width, data.cell.y + data.cell.height);
         }
       }
     });
 
-    // 3. Card de Resumo (O "toque" moderno)
+    // 3. Card de Resumo (Onde estava o erro)
     const finalY = doc.lastAutoTable.finalY + 15;
-    const entradas = transacoesFiltradas.filter(t => t.valor >= 0).reduce((acc, t) => acc + parseFloat(t.valor), 0);
-    const saidas = transacoesFiltradas.filter(t => t.valor < 0).reduce((acc, t) => acc + Math.abs(t.valor), 0);
-    const saldo = entradas - saidas;
+    doc.setFillColor(...cSlate100).roundedRect(14, finalY, 182, 30, 4, 4, 'F');
+    
+    doc.setFontSize(7).setFont("helvetica", "bold").setTextColor(...cSlate500).text("RESUMO DO PERÍODO", 22, finalY + 10);
 
-    doc.setFillColor(248, 250, 252).roundedRect(14, finalY, 182, 35, 3, 3, 'F');
-    doc.setFontSize(8).setFont("helvetica", "bold").setTextColor(...config.colors.slate500).text("RESUMO FINANCEIRO", 24, finalY + 10);
+    // Entradas
+    doc.setFontSize(7).setTextColor(...cSlate500).text("ENTRADAS", 22, finalY + 18);
+    doc.setFontSize(10).setTextColor(...cEmerald).text(`R$ ${formatCurrency(entradas)}`, 22, finalY + 25);
 
-    // Valores do Resumo
-    const drawStat = (label, value, color, x) => {
-      doc.setFontSize(7).setTextColor(...config.colors.slate500).text(label, x, finalY + 18);
-      doc.setFontSize(10).setTextColor(...color).text(`R$ ${formatCurrency(value)}`, x, finalY + 26);
-    };
+    // Saídas
+    doc.setFontSize(7).setTextColor(...cSlate500).text("SAÍDAS", 80, finalY + 18);
+    doc.setFontSize(10).setTextColor(...cRose).text(`R$ ${formatCurrency(saidas)}`, 80, finalY + 25);
 
-    drawStat("ENTRADAS", entradas, config.colors.success, 24);
-    drawStat("SAÍDAS", saidas, config.colors.danger, 74);
-    drawStat("SALDO LÍQUIDO", saldo, saldo >= 0 ? config.colors.primary : config.colors.danger, 124);
+    // Saldo (Fix da cor dinâmica)
+    const corSaldo = saldoLiquido >= 0 ? cIndigo : cRose;
+    doc.setFontSize(7).setTextColor(...cSlate500).text("SALDO LÍQUIDO", 140, finalY + 18);
+    doc.setFontSize(10).setTextColor(...corSaldo).text(`R$ ${formatCurrency(saldoLiquido)}`, 140, finalY + 25);
 
     doc.save(`Financely_Relatorio_${new Date().toISOString().slice(0,10)}.pdf`);
-    
   } catch (error) { 
     console.error('Erro PDF:', error);
-    alert("Erro ao gerar relatório técnico.");
+    alert("Erro ao gerar relatório.");
   }
 };
+
   const exportarCSV = () => {
-    const cabecalho = "Descricao;Categoria;Data;Valor;Tipo\n";
+    const cabecalho = "Descricao;Categoria;Conta;Data;Valor;Tipo\n";
     const linhas = transacoesFiltradas.map(t => 
-      `${t.descricao};${t.nome_categoria};${new Date(t.data_transacao).toLocaleDateString()};${t.valor};${t.tipo_movimento}`
+      `${t.descricao};${t.nome_categoria};${t.nome_conta};${new Date(t.data_transacao).toLocaleDateString()};${t.valor};${t.tipo_movimento}`
     ).join('\n');
     const blob = new Blob(["\ufeff" + cabecalho + linhas], { type: 'text/csv;charset=utf-8;' });
     const link = document.createElement("a");
     link.href = URL.createObjectURL(blob);
-    link.download = "relatorio.csv";
+    link.download = "relatorio_financely.csv";
     link.click();
+  }
+
+  const deletarTransacao = async (id) => {
+    if (window.confirm("⚠️ Deseja excluir esta transação?")) {
+      try {
+        const res = await fetch(`${API_URL}/deletar-transacao/${id}`, { method: 'DELETE' })
+        if (res.ok) carregarDados();
+      } catch (err) { alert("Erro ao deletar.") }
+    }
+  }
+
+  const iniciarEdicao = (t) => {
+    setEditando(t.id_transacao)
+    setFormEdit({ 
+      descricao: t.descricao, valor: Math.abs(t.valor), id_categoria: t.id_categoria,
+      data_transacao: t.data_transacao ? t.data_transacao.split('T')[0] : '',
+      tipo_movimento: t.tipo_movimento 
+    })
+  }
+
+  const salvarEdicao = async (e) => {
+    e.preventDefault()
+    try {
+      const res = await fetch(`${API_URL}/editar-transacao/${editando}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(formEdit)
+      })
+      if (res.ok) { setEditando(null); carregarDados(); }
+    } catch (err) { alert("Erro ao editar.") }
   }
 
   return (
     <div className="space-y-8 text-black pb-20">
+      {/* CABEÇALHO COM BOTÕES DE EXPORTAÇÃO */}
       <div className="flex justify-between items-center">
         <div>
-          <h2 className="text-3xl font-bold text-slate-800">Relatórios</h2>
-          <p className="text-slate-500 text-sm">Controle total dos seus dados.</p>
+          <h2 className="text-3xl font-black text-slate-800 tracking-tight">Relatórios</h2>
+          <p className="text-slate-500 font-medium">Controle detalhado das movimentações.</p>
         </div>
         <div className="flex gap-2">
-          <button onClick={exportarCSV} className="px-4 py-2 bg-slate-100 rounded-xl font-bold text-xs hover:bg-slate-200">CSV</button>
-          <button onClick={exportarPDF} className="px-4 py-2 bg-indigo-600 text-white rounded-xl font-bold text-xs hover:bg-indigo-700">PDF</button>
+          <button onClick={exportarCSV} className="px-4 py-2 bg-slate-100 rounded-xl font-bold text-xs hover:bg-slate-200 transition-all">CSV</button>
+          <button onClick={exportarPDF} className="px-4 py-2 bg-indigo-600 text-white rounded-xl font-bold text-xs hover:bg-indigo-700 shadow-lg shadow-indigo-100">PDF</button>
         </div>
       </div>
 
-      {/* FILTROS INTEGRADOS */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 bg-white p-6 rounded-3xl shadow-sm border border-slate-100">
-        <input 
-          type="text" 
-          placeholder="Pesquisar descrição..." 
-          className="p-4 bg-slate-50 rounded-2xl outline-none border border-slate-50 focus:border-indigo-300 transition-all"
-          value={filtroTexto} 
-          onChange={e => setFiltroTexto(e.target.value)} 
-        />
-        <select 
-          className="p-4 bg-slate-50 rounded-2xl outline-none border border-slate-50"
-          value={filtroCategoria} 
-          onChange={e => setFiltroCategoria(e.target.value)}
-        >
+      {/* CARDS DE RESUMO */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+        <div className="bg-white p-6 rounded-[2rem] border border-slate-100 shadow-sm">
+          <p className="text-slate-400 text-xs font-bold uppercase">Entradas</p>
+          <h3 className="text-2xl font-black text-emerald-500">R$ {entradas.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</h3>
+        </div>
+        <div className="bg-white p-6 rounded-[2rem] border border-slate-100 shadow-sm">
+          <p className="text-slate-400 text-xs font-bold uppercase">Saídas</p>
+          <h3 className="text-2xl font-black text-rose-500">R$ {saidas.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</h3>
+        </div>
+        <div className="bg-white p-6 rounded-[2rem] border border-slate-100 shadow-sm">
+          <p className="text-slate-400 text-xs font-bold uppercase">Saldo Líquido</p>
+          <h3 className={`text-2xl font-black ${saldoLiquido >= 0 ? 'text-indigo-600' : 'text-rose-600'}`}>
+            R$ {saldoLiquido.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+          </h3>
+        </div>
+      </div>
+
+      {/* FILTROS */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 bg-white p-6 rounded-[2rem] shadow-sm border border-slate-100">
+        <input type="text" placeholder="Filtrar descrição..." className="p-4 bg-slate-50 rounded-2xl outline-none" value={filtroTexto} onChange={e => setFiltroTexto(e.target.value)} />
+        <select className="p-4 bg-slate-50 rounded-2xl outline-none" value={filtroCategoria} onChange={e => setFiltroCategoria(e.target.value)}>
           <option value="">Todas as Categorias</option>
           {categorias.map(c => <option key={c.id_categoria} value={c.id_categoria}>{c.nome_categoria}</option>)}
         </select>
+        <select className="p-4 bg-slate-50 rounded-2xl outline-none" value={filtroConta} onChange={e => setFiltroConta(e.target.value)}>
+          <option value="">Todas as Contas</option>
+          {contas.map(conta => <option key={conta.id_conta} value={conta.id_conta}>{conta.nome_conta}</option>)}
+        </select>
       </div>
 
-      {/* TABELA DE DADOS */}
-      <div className="bg-white rounded-3xl shadow-xl shadow-slate-200/50 border border-slate-100 overflow-hidden">
+      {/* TABELA COM 6 COLUNAS */}
+      <div className="bg-white rounded-[2rem] shadow-xl border border-slate-100 overflow-hidden">
         <table className="w-full text-left">
           <thead className="bg-slate-50 border-b border-slate-100">
             <tr>
-              <th className="p-6 text-xs font-bold text-slate-400 uppercase">Descrição</th>
+              <th className="p-6 text-xs font-bold text-slate-400 uppercase tracking-widest">Descrição</th>
               <th className="p-6 text-xs font-bold text-slate-400 uppercase text-center">Categoria</th>
+              <th className="p-6 text-xs font-bold text-slate-400 uppercase text-center">Conta</th>
+              <th className="p-6 text-xs font-bold text-slate-400 uppercase text-center">Data</th>
               <th className="p-6 text-xs font-bold text-slate-400 uppercase text-right">Valor</th>
               <th className="p-6 text-xs font-bold text-slate-400 uppercase text-center">Ações</th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-slate-100">
+          <tbody className="divide-y divide-slate-100 font-medium">
             {transacoesFiltradas.map((t) => (
               <tr key={t.id_transacao} className="group hover:bg-slate-50/80 transition-all">
-                <td className="p-6 font-semibold text-slate-700">{t.descricao}</td>
-                <td className="p-6 text-center"><span className="text-[10px] font-bold bg-slate-100 px-2 py-1 rounded-md text-slate-500 uppercase">{t.nome_categoria}</span></td>
-                <td className={`p-6 text-right font-bold ${t.valor >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
-                  R$ {Math.abs(t.valor).toFixed(2)}
+                <td className="p-6 font-bold text-slate-700">{t.descricao}</td>
+                <td className="p-6 text-center">
+                  <span className="text-[9px] font-black bg-indigo-50 text-indigo-600 px-3 py-1 rounded-full uppercase">{t.nome_categoria || 'Geral'}</span>
                 </td>
-                <td className="p-8">
-  <div className="flex justify-center gap-4 transition-all">
-    {/* ÍCONE DE LÁPIS (EDITAR) */}
-    <button 
-      onClick={() => iniciarEdicao(t)} 
-      className="p-2 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-xl transition-all"
-    >
-      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-        <path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/><path d="m15 5 4 4"/>
-      </svg>
-    </button>
-
-    {/* ÍCONE DE LIXEIRA (EXCLUIR) */}
-    <button 
-      onClick={() => deletarTransacao(t.id_transacao)} 
-      className="p-2 text-slate-400 hover:text-rose-500 hover:bg-rose-50 rounded-xl transition-all"
-    >
-      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-        <path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/><line x1="10" x2="10" y1="11" y2="17"/><line x1="14" x2="14" y1="11" y2="17"/>
-      </svg>
-    </button>
-  </div>
-</td>
+                <td className="p-6 text-center">
+                  <span className="text-[9px] font-bold bg-slate-100 text-slate-500 px-3 py-1 rounded-full uppercase">{t.nome_conta || 'Sem Conta'}</span>
+                </td>
+                <td className="p-6 text-center text-xs text-slate-400">
+                  {isClient && new Date(t.data_transacao).toLocaleDateString('pt-BR')}
+                </td>
+                <td className={`p-6 text-right font-black ${t.valor >= 0 ? 'text-emerald-500' : 'text-rose-500'}`}>
+                  {t.valor >= 0 ? '+' : '-'} R$ {Math.abs(t.valor).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                </td>
+                <td className="p-6 text-center">
+                  <div className="flex justify-center gap-2">
+                    <button onClick={() => iniciarEdicao(t)} className="p-2 text-slate-300 hover:text-indigo-600">
+                       <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/><path d="m15 5 4 4"/></svg>
+                    </button>
+                    <button onClick={() => deletarTransacao(t.id_transacao)} className="p-2 text-slate-300 hover:text-rose-500">
+                       <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/></svg>
+                    </button>
+                  </div>
+                </td>
               </tr>
             ))}
           </tbody>
@@ -269,11 +280,8 @@ export default function Relatorios() {
           <div className="bg-white w-full max-w-md rounded-[2.5rem] p-10 shadow-2xl">
             <h3 className="text-xl font-bold mb-6 text-slate-800">Editar Registro</h3>
             <form onSubmit={salvarEdicao} className="space-y-4">
-              <input type="text" className="w-full p-4 bg-slate-50 rounded-xl outline-none font-semibold border border-slate-100" value={formEdit.descricao} onChange={e => setFormEdit({...formEdit, descricao: e.target.value})} />
-              <input type="number" className="w-full p-4 bg-slate-50 rounded-xl outline-none font-semibold border border-slate-100" value={formEdit.valor} onChange={e => setFormEdit({...formEdit, valor: e.target.value})} />
-              <select className="w-full p-4 bg-slate-50 rounded-xl outline-none font-semibold border border-slate-100" value={formEdit.id_categoria} onChange={e => setFormEdit({...formEdit, id_categoria: e.target.value})}>
-                {categorias.map(c => <option key={c.id_categoria} value={c.id_categoria}>{c.nome_categoria}</option>)}
-              </select>
+              <input type="text" className="w-full p-4 bg-slate-50 rounded-xl outline-none" value={formEdit.descricao} onChange={e => setFormEdit({...formEdit, descricao: e.target.value})} />
+              <input type="number" className="w-full p-4 bg-slate-50 rounded-xl outline-none" value={formEdit.valor} onChange={e => setFormEdit({...formEdit, valor: e.target.value})} />
               <div className="flex gap-3 pt-4">
                 <button type="button" onClick={() => setEditando(null)} className="flex-1 py-4 font-bold text-slate-400">Cancelar</button>
                 <button type="submit" className="flex-1 py-4 font-bold bg-indigo-600 text-white rounded-xl">Salvar</button>

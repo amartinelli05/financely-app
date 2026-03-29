@@ -157,9 +157,7 @@ export default function Relatorios() {
   const deletarTransacao = async (id) => {
     if (window.confirm("⚠️ Deseja excluir esta transação?")) {
       try {
-        const res = await fetch(`${API_URL}/deletar-transacao/${id}`, { method: 'DELETE' })
-        if (res.ok) carregarDados();
-      } catch (err) { alert("Erro ao deletar.") }
+      const res = await fetch(`${API_URL}/deletar-transacao/${id}`, { method: 'DELETE' })      } catch (err) { alert("Erro ao deletar.") }
     }
   }
 
@@ -175,8 +173,7 @@ export default function Relatorios() {
   const salvarEdicao = async (e) => {
     e.preventDefault()
     try {
-      const res = await fetch(`${API_URL}/editar-transacao/${editando}`, {
-        method: 'PUT',
+        const res = await fetch(`${API_URL}/editar-transacao/${editando}`, {        method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(formEdit)
       })

@@ -16,8 +16,13 @@ const [dataFim, setDataFim] = useState('')
   const [isClient, setIsClient] = useState(false) 
 
   const [formEdit, setFormEdit] = useState({ 
-    descricao: '', valor: '', id_categoria: '', data_transacao: '', tipo_movimento: '' 
-  })
+  descricao: '', 
+  valor: '', 
+  id_categoria: '', 
+  id_conta: '', // <--- Adicionamos esse campo aqui
+  data_transacao: '', 
+  tipo_movimento: '' 
+})
 
   useEffect(() => { setIsClient(true) }, [])
 
@@ -356,21 +361,50 @@ const deletarTransacao = async (id) => {
       </div>
 
       {/* MODAL DE EDIÇÃO */}
-      {editando && (
-        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-          <div className="bg-white w-full max-w-md rounded-[2.5rem] p-10 shadow-2xl">
-            <h3 className="text-xl font-bold mb-6 text-slate-800">Editar Registro</h3>
-            <form onSubmit={salvarEdicao} className="space-y-4">
-              <input type="text" className="w-full p-4 bg-slate-50 rounded-xl outline-none" value={formEdit.descricao} onChange={e => setFormEdit({...formEdit, descricao: e.target.value})} />
-              <input type="number" className="w-full p-4 bg-slate-50 rounded-xl outline-none" value={formEdit.valor} onChange={e => setFormEdit({...formEdit, valor: e.target.value})} />
-              <div className="flex gap-3 pt-4">
-                <button type="button" onClick={() => setEditando(null)} className="flex-1 py-4 font-bold text-slate-400">Cancelar</button>
-                <button type="submit" className="flex-1 py-4 font-bold bg-indigo-600 text-white rounded-xl">Salvar</button>
-              </div>
-            </form>
+{editando && (
+  <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center z-50 p-4 text-black">
+    <div className="bg-white w-full max-w-md rounded-[2.5rem] p-10 shadow-2xl overflow-y-auto max-h-[90vh]">
+      <h3 className="text-xl font-black mb-6 text-slate-800 uppercase tracking-tighter">Editar Registro</h3>
+      <form onSubmit={salvarEdicao} className="space-y-4">
+        
+        <div className="space-y-1">
+          <label className="text-[10px] font-black text-slate-400 uppercase ml-2">Descrição</label>
+          <input type="text" className="w-full p-4 bg-slate-50 rounded-2xl outline-none font-semibold" value={formEdit.descricao} onChange={e => setFormEdit({...formEdit, descricao: e.target.value})} />
+        </div>
+
+        <div className="grid grid-cols-2 gap-4">
+          <div className="space-y-1">
+            <label className="text-[10px] font-black text-slate-400 uppercase ml-2">Valor</label>
+            <input type="number" className="w-full p-4 bg-slate-50 rounded-2xl outline-none font-semibold" value={formEdit.valor} onChange={e => setFormEdit({...formEdit, valor: e.target.value})} />
+          </div>
+          <div className="space-y-1">
+            <label className="text-[10px] font-black text-slate-400 uppercase ml-2">Data</label>
+            <input type="date" className="w-full p-4 bg-slate-50 rounded-2xl outline-none font-semibold text-slate-500" value={formEdit.data_transacao} onChange={e => setFormEdit({...formEdit, data_transacao: e.target.value})} />
           </div>
         </div>
-      )}
+
+        <div className="space-y-1">
+          <label className="text-[10px] font-black text-slate-400 uppercase ml-2">Conta</label>
+          <select className="w-full p-4 bg-slate-50 rounded-2xl outline-none font-semibold appearance-none" value={formEdit.id_conta} onChange={e => setFormEdit({...formEdit, id_conta: e.target.value})}>
+            {contas.map(conta => <option key={conta.id_conta} value={conta.id_conta}>{conta.nome_conta}</option>)}
+          </select>
+        </div>
+
+        <div className="space-y-1">
+          <label className="text-[10px] font-black text-slate-400 uppercase ml-2">Categoria</label>
+          <select className="w-full p-4 bg-slate-50 rounded-2xl outline-none font-semibold appearance-none" value={formEdit.id_categoria} onChange={e => setFormEdit({...formEdit, id_categoria: e.target.value})}>
+            {categorias.map(c => <option key={c.id_categoria} value={c.id_categoria}>{c.nome_categoria}</option>)}
+          </select>
+        </div>
+
+        <div className="flex gap-3 pt-6">
+          <button type="button" onClick={() => setEditando(null)} className="flex-1 py-4 font-black text-slate-400 uppercase text-xs tracking-widest">Cancelar</button>
+          <button type="submit" className="flex-1 py-4 bg-indigo-600 text-white font-black rounded-[1.5rem] uppercase text-xs tracking-widest shadow-lg shadow-indigo-100 hover:bg-indigo-700">Salvar Alterações</button>
+        </div>
+      </form>
+    </div>
+  </div>
+)}
     </div>
   )
 }

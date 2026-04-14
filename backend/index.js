@@ -180,30 +180,41 @@ app.delete('/deletar-transacao/:id', async (req, res) => {
 
 app.put('/editar-transacao/:id', async (req, res) => {
   const { id } = req.params;
-  const { descricao, valor, id_categoria, data_transacao, tipo_movimento } = req.body;
+  const { descricao, valor, id_categoria, id_conta, data_transacao, tipo_movimento } = req.body;
   const client = await pool.connect();
+
   try {
     await client.query('BEGIN');
-    const atualRes = await client.query('SELECT id_conta FROM transacoes WHERE id_transacao = $1', [id]);
-    if (atualRes.rows.length === 0) {
-      await client.query('ROLLBACK');
-      return res.status(404).json({ erro: "Não encontrado." });
-    }
-    const id_conta = atualRes.rows[0].id_conta;
+
+    // 1. Garantir o sinal correto do valor
+    const valorAjustado = tipo_movimento === 'Saída' ? -Math.abs(valor) : Math.abs(valor);
+
+    // 2. Atualizar a transação
     await client.query(
-      `UPDATE transacoes SET descricao = $1, valor = $2, id_categoria = $3, data_transacao = $4, tipo_movimento = $5 WHERE id_transacao = $6`,
-      [descricao, valor, id_categoria, data_transacao, tipo_movimento, id]
+      `UPDATE transacoes 
+       SET descricao = $1, valor = $2, id_categoria = $3, id_conta = $4, data_transacao = $5, tipo_movimento = $6 
+       WHERE id_transacao = $7`,
+      [descricao, valorAjustado, id_categoria, id_conta, data_transacao, tipo_movimento, id]
     );
-    const somaRes = await client.query('SELECT SUM(valor) as total FROM transacoes WHERE id_conta = $1', [id_conta]);
+
+    // 3. Recalcular saldo da conta afetada
+    const somaRes = await client.query('SELECT COALESCE(SUM(valor), 0) as total FROM transacoes WHERE id_conta = $1', [id_conta]);
     const contaRes = await client.query('SELECT saldo_inicial FROM contas WHERE id_conta = $1', [id_conta]);
-    const novoSaldo = (parseFloat(contaRes.rows[0].saldo_inicial) || 0) + (parseFloat(somaRes.rows[0].total) || 0);
-    await client.query('UPDATE contas SET saldo_atual = $1 WHERE id_conta = $2', [novoSaldo, id_conta]);
+    
+    if (contaRes.rows.length > 0) {
+      const novoSaldo = (parseFloat(contaRes.rows[0].saldo_inicial) || 0) + (parseFloat(somaRes.rows[0].total) || 0);
+      await client.query('UPDATE contas SET saldo_atual = $1 WHERE id_conta = $2', [novoSaldo, id_conta]);
+    }
+
     await client.query('COMMIT');
     res.json({ mensagem: "Editado e saldo recalculado!" });
   } catch (err) {
     await client.query('ROLLBACK');
-    res.status(500).json({ erro: "Erro ao editar." });
-  } finally { client.release(); }
+    console.error(err);
+    res.status(500).json({ erro: "Erro ao editar transação." });
+  } finally {
+    client.release();
+  }
 });
 
 // --- 3. CATEGORIAS (LISTAR, CRIAR, EDITAR E EXCLUIR) ---

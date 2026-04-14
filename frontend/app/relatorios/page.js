@@ -10,6 +10,8 @@ export default function Relatorios() {
   const [filtroTexto, setFiltroTexto] = useState('')
   const [filtroCategoria, setFiltroCategoria] = useState('')
   const [filtroConta, setFiltroConta] = useState('')
+  const [dataInicio, setDataInicio] = useState('')
+const [dataFim, setDataFim] = useState('')
   const [editando, setEditando] = useState(null)
   const [isClient, setIsClient] = useState(false) 
 
@@ -42,12 +44,18 @@ export default function Relatorios() {
 
   useEffect(() => { carregarDados() }, [])
 
-  const transacoesFiltradas = transacoes.filter(t => {
-    const descricaoMatch = t.descricao.toLowerCase().includes(filtroTexto.toLowerCase())
-    const categoriaMatch = filtroCategoria === '' || String(t.id_categoria) === String(filtroCategoria)
-    const contaMatch = filtroConta === '' || String(t.id_conta) === String(filtroConta)
-    return descricaoMatch && categoriaMatch && contaMatch
-  })
+const transacoesFiltradas = transacoes.filter(t => {
+  const matchesTexto = t.descricao.toLowerCase().includes(filtroTexto.toLowerCase())
+  const matchesCategoria = filtroCategoria === '' || String(t.id_categoria) === String(filtroCategoria)
+  const matchesConta = filtroConta === '' || String(t.id_conta) === String(filtroConta)
+  
+  // Lógica de filtro por data
+  const dataTransacao = t.data_transacao.split('T')[0] // Pega apenas YYYY-MM-DD
+  const matchesDataInicio = dataInicio === '' || dataTransacao >= dataInicio
+  const matchesDataFim = dataFim === '' || dataTransacao <= dataFim
+
+  return matchesTexto && matchesCategoria && matchesConta && matchesDataInicio && matchesDataFim
+})
 
   const entradas = transacoesFiltradas.filter(t => t.valor >= 0).reduce((acc, t) => acc + parseFloat(t.valor), 0);
   const saidas = transacoesFiltradas.filter(t => t.valor < 0).reduce((acc, t) => acc + Math.abs(t.valor), 0);
@@ -228,18 +236,79 @@ const deletarTransacao = async (id) => {
         </div>
       </div>
 
-      {/* FILTROS */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 bg-white p-6 rounded-[2rem] shadow-sm border border-slate-100">
-        <input type="text" placeholder="Filtrar descrição..." className="p-4 bg-slate-50 rounded-2xl outline-none" value={filtroTexto} onChange={e => setFiltroTexto(e.target.value)} />
-        <select className="p-4 bg-slate-50 rounded-2xl outline-none" value={filtroCategoria} onChange={e => setFiltroCategoria(e.target.value)}>
-          <option value="">Todas as Categorias</option>
-          {categorias.map(c => <option key={c.id_categoria} value={c.id_categoria}>{c.nome_categoria}</option>)}
-        </select>
-        <select className="p-4 bg-slate-50 rounded-2xl outline-none" value={filtroConta} onChange={e => setFiltroConta(e.target.value)}>
-          <option value="">Todas as Contas</option>
-          {contas.map(conta => <option key={conta.id_conta} value={conta.id_conta}>{conta.nome_conta}</option>)}
-        </select>
-      </div>
+     {/* SEÇÃO DE FILTROS UNIFICADA */}
+<div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 gap-4 bg-white p-6 rounded-[2rem] shadow-sm border border-slate-100 text-black">
+  
+  {/* 1. Busca por texto */}
+  <div className="flex flex-col">
+    <label className="text-[10px] font-black text-slate-400 uppercase ml-2 mb-1">Descrição</label>
+    <input 
+      type="text"
+      placeholder="Filtrar descrição..." 
+      className="p-4 bg-slate-50 rounded-2xl outline-none font-bold text-sm"
+      value={filtroTexto} 
+      onChange={e => setFiltroTexto(e.target.value)} 
+    />
+  </div>
+
+  {/* 2. Filtro de Categoria */}
+  <div className="flex flex-col">
+    <label className="text-[10px] font-black text-slate-400 uppercase ml-2 mb-1">Categoria</label>
+    <select 
+      className="p-4 bg-slate-50 rounded-2xl outline-none font-bold text-sm appearance-none" 
+      value={filtroCategoria} 
+      onChange={e => setFiltroCategoria(e.target.value)}
+    >
+      <option value="">Todas as Categorias</option>
+      {categorias.map(c => <option key={c.id_categoria} value={c.id_categoria}>{c.nome_categoria}</option>)}
+    </select>
+  </div>
+
+  {/* 3. Filtro de Conta */}
+  <div className="flex flex-col">
+    <label className="text-[10px] font-black text-slate-400 uppercase ml-2 mb-1">Conta</label>
+    <select 
+      className="p-4 bg-slate-50 rounded-2xl outline-none font-bold text-sm appearance-none" 
+      value={filtroConta} 
+      onChange={e => setFiltroConta(e.target.value)}
+    >
+      <option value="">Todas as Contas</option>
+      {contas.map(conta => <option key={conta.id_conta} value={conta.id_conta}>{conta.nome_conta}</option>)}
+    </select>
+  </div>
+
+  {/* 4. Filtro Data Início */}
+  <div className="flex flex-col">
+    <label className="text-[10px] font-black text-slate-400 uppercase ml-2 mb-1">Início</label>
+    <input 
+      type="date" 
+      className="p-4 bg-slate-50 rounded-2xl outline-none font-bold text-sm text-slate-600"
+      value={dataInicio} 
+      onChange={e => setDataInicio(e.target.value)}
+    />
+  </div>
+
+  {/* 5. Filtro Data Fim */}
+  <div className="flex flex-col relative">
+    <label className="text-[10px] font-black text-slate-400 uppercase ml-2 mb-1 flex justify-between">
+      Fim
+      {(dataInicio || dataFim) && (
+        <button 
+          onClick={() => { setDataInicio(''); setDataFim(''); }}
+          className="text-[9px] text-rose-500 hover:underline"
+        >
+          Limpar
+        </button>
+      )}
+    </label>
+    <input 
+      type="date" 
+      className="p-4 bg-slate-50 rounded-2xl outline-none font-bold text-sm text-slate-600"
+      value={dataFim} 
+      onChange={e => setDataFim(e.target.value)}
+    />
+  </div>
+</div>
 
       {/* TABELA COM 6 COLUNAS */}
       <div className="bg-white rounded-[2rem] shadow-xl border border-slate-100 overflow-hidden">

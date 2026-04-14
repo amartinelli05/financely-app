@@ -118,27 +118,64 @@ app.post('/nova-transacao', async (req, res) => {
 app.delete('/deletar-transacao/:id', async (req, res) => {
   const { id } = req.params;
   const client = await pool.connect();
+  
   try {
     await client.query('BEGIN');
-    const transacaoRes = await client.query('SELECT id_conta FROM transacoes WHERE id_transacao = $1', [id]);
+
+    // 1. Primeiro, buscamos os dados da transação ANTES de deletar
+    const transacaoRes = await client.query(
+      'SELECT id_conta FROM transacoes WHERE id_transacao = $1', 
+      [id]
+    );
+    
     if (transacaoRes.rows.length === 0) {
       await client.query('ROLLBACK');
       return res.status(404).json({ erro: "Transação não encontrada." });
     }
+
     const id_conta = transacaoRes.rows[0].id_conta;
+
+    // 2. Agora deletamos a transação
     await client.query('DELETE FROM transacoes WHERE id_transacao = $1', [id]);
-    
-    const somaRes = await client.query('SELECT SUM(valor) as total FROM transacoes WHERE id_conta = $1', [id_conta]);
-    const contaRes = await client.query('SELECT saldo_inicial FROM contas WHERE id_conta = $1', [id_conta]);
-    const novoSaldo = (parseFloat(contaRes.rows[0].saldo_inicial) || 0) + (parseFloat(somaRes.rows[0].total) || 0);
-    
-    await client.query('UPDATE contas SET saldo_atual = $1 WHERE id_conta = $2', [novoSaldo, id_conta]);
+
+    // 3. Buscamos a conta. Usamos LEFT JOIN ou garantimos que a conta existe
+    const contaRes = await client.query(
+      'SELECT saldo_inicial FROM contas WHERE id_conta = $1', 
+      [id_conta]
+    );
+
+    // VERIFICAÇÃO DE SEGURANÇA: Se a conta não existir, não tentamos calcular
+    if (contaRes.rows.length === 0) {
+       await client.query('COMMIT'); // Deleta a transação mesmo assim
+       return res.json({ mensagem: "Excluído, mas conta não encontrada para atualizar saldo." });
+    }
+
+    // 4. Recalculamos a soma das transações restantes
+    const somaRes = await client.query(
+      'SELECT COALESCE(SUM(valor), 0) as total FROM transacoes WHERE id_conta = $1', 
+      [id_conta]
+    );
+
+    const saldoInicial = parseFloat(contaRes.rows[0].saldo_inicial) || 0;
+    const totalTransacoes = parseFloat(somaRes.rows[0].total) || 0;
+    const novoSaldo = saldoInicial + totalTransacoes;
+
+    // 5. Atualizamos o saldo_atual da conta
+    await client.query(
+      'UPDATE contas SET saldo_atual = $1 WHERE id_conta = $2', 
+      [novoSaldo, id_conta]
+    );
+
     await client.query('COMMIT');
-    res.json({ mensagem: "Excluído e saldo atualizado!" });
+    res.json({ mensagem: "Excluído e saldo atualizado com sucesso!" });
+
   } catch (err) {
     await client.query('ROLLBACK');
-    res.status(500).json({ erro: "Erro ao deletar." });
-  } finally { client.release(); }
+    console.error("ERRO CRÍTICO NO DELETE:", err.message);
+    res.status(500).json({ erro: "Erro interno ao processar exclusão." });
+  } finally {
+    client.release();
+  }
 });
 
 app.put('/editar-transacao/:id', async (req, res) => {

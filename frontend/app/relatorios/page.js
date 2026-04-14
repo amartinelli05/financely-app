@@ -154,12 +154,27 @@ export default function Relatorios() {
     link.click();
   }
 
-  const deletarTransacao = async (id) => {
-    if (window.confirm("⚠️ Deseja excluir esta transação?")) {
-      try {
-      const res = await fetch(`${API_URL}/deletar-transacao/${id}`, { method: 'DELETE' })      } catch (err) { alert("Erro ao deletar.") }
+const deletarTransacao = async (id) => {
+  if (window.confirm("⚠️ Deseja excluir esta transação?")) {
+    try {
+      const res = await fetch(`${API_URL}/deletar-transacao/${id}`, { 
+        method: 'DELETE' 
+      });
+
+      if (res.ok) {
+        // ESSENCIAL: Chame a função que carrega os dados novamente
+        // para o item sumir da tela na hora
+        carregarDados(); 
+      } else {
+        const errorData = await res.json();
+        alert(`Erro: ${errorData.erro || "Não foi possível excluir."}`);
+      }
+    } catch (err) { 
+      console.error(err);
+      alert("Erro ao conectar com o servidor.");
     }
   }
+};
 
   const iniciarEdicao = (t) => {
     setEditando(t.id_transacao)

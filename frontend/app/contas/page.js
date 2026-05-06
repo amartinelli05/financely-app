@@ -2,7 +2,7 @@
 import { useState, useEffect } from 'react'
 
 // Aqui a mágica acontece: ele decide sozinho se usa o local ou o Render (Produção)
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000';
+const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
 
 export default function ContasPage() {
   const [contas, setContas] = useState([])

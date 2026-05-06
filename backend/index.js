@@ -465,6 +465,134 @@ app.get('/admin-stats', async (req, res) => {
   }
 });
 
+// --- MÓDULO DE DESPESAS FIXAS (RECORRÊNCIA) ---
+
+// 1. LISTAR CONTRATOS FIXOS
+app.get('/listar-despesas-fixas', async (req, res) => {
+  const { id_usuario } = req.query;
+  try {
+    const query = `
+      SELECT df.*, c.nome_categoria, co.nome_conta 
+      FROM despesas_fixas df
+      LEFT JOIN categorias c ON df.id_categoria = c.id_categoria
+      LEFT JOIN contas co ON df.id_conta = co.id_conta
+      WHERE df.id_usuario = $1
+      ORDER BY df.id_fixa DESC`;
+    const resultado = await pool.query(query, [id_usuario]);
+    res.json(resultado.rows);
+  } catch (err) {
+    res.status(500).json({ erro: "Erro ao listar despesas fixas." });
+  }
+});
+
+// 2. CADASTRAR (COM LÓGICA MENSAL/SEMANAL E DIA ÚTIL)
+app.post('/cadastrar-despesa-fixa', async (req, res) => {
+  const { id_usuario, id_categoria, id_conta, valor, descricao, dia_vencimento, data_inicio, data_final, frequencia } = req.body;
+  const client = await pool.connect();
+  
+  try {
+    await client.query('BEGIN');
+    const grupoId = require('crypto').randomUUID();
+
+    // Salva o contrato mestre
+    await client.query(
+      `INSERT INTO despesas_fixas (id_usuario, id_categoria, id_conta, valor, descricao, dia_vencimento, data_inicio, data_final, frequencia, id_grupo_vinculo)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
+      [id_usuario, id_categoria, id_conta, valor, descricao, dia_vencimento, data_inicio, data_final, frequencia, grupoId]
+    );
+
+    let dataAtual = new Date(data_inicio);
+    const dataLimite = new Date(data_final);
+
+    // Função de ajuste para próximo dia útil
+    const ajustarDiaUtil = (data) => {
+      const d = new Date(data);
+      if (d.getDay() === 0) d.setDate(d.getDate() + 1); // Domingo -> Segunda
+      if (d.getDay() === 6) d.setDate(d.getDate() + 2); // Sábado -> Segunda
+      return d;
+    };
+
+    while (dataAtual <= dataLimite) {
+      let dataParcela = new Date(dataAtual);
+      
+      // Se for mensal, garante o dia específico do vencimento
+      if (frequencia === 'mensal') {
+        dataParcela.setDate(dia_vencimento);
+      }
+
+      const dataFinalAjustada = ajustarDiaUtil(dataParcela);
+      
+      await client.query(
+        `INSERT INTO transacoes (id_usuario, id_categoria, id_conta, valor, descricao, data_transacao, tipo_movimento, id_grupo_fixo)
+         VALUES ($1, $2, $3, $4, $5, $6, 'Saída', $7)`,
+        [id_usuario, id_categoria, id_conta, -Math.abs(valor), `${descricao} (Fixo)`, dataFinalAjustada, grupoId]
+      );
+
+      // Avança o loop baseado na frequência
+      if (frequencia === 'mensal') {
+        dataAtual.setMonth(dataAtual.getMonth() + 1);
+      } else {
+        dataAtual.setDate(dataAtual.getDate() + 7); // Semanal
+      }
+    }
+
+    await client.query('COMMIT');
+    res.status(201).json({ mensagem: "Despesa fixa e parcelas geradas!" });
+  } catch (err) {
+    await client.query('ROLLBACK');
+    res.status(500).json({ erro: "Erro ao processar despesa fixa." });
+  } finally { client.release(); }
+});
+
+// 3. EDITAR EM MASSA (CONTRATO E TRANSAÇÕES FUTURAS)
+app.put('/editar-despesa-fixa/:grupoId', async (req, res) => {
+  const { grupoId } = req.params;
+  const { valor, descricao, id_categoria } = req.body;
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    
+    // Atualiza o contrato mestre
+    await client.query(
+      "UPDATE despesas_fixas SET valor = $1, descricao = $2, id_categoria = $3 WHERE id_grupo_vinculo = $4",
+      [valor, descricao, id_categoria, grupoId]
+    );
+
+    // Atualiza apenas as transações que ainda não venceram
+    await client.query(
+      "UPDATE transacoes SET valor = $1, descricao = $2, id_categoria = $3 WHERE id_grupo_fixo = $4 AND data_transacao >= CURRENT_DATE",
+      [-Math.abs(valor), `${descricao} (Fixo)`, id_categoria, grupoId]
+    );
+
+    await client.query('COMMIT');
+    res.json({ mensagem: "Contrato e lançamentos futuros atualizados!" });
+  } catch (err) {
+    await client.query('ROLLBACK');
+    res.status(500).json({ erro: "Erro ao editar em massa." });
+  } finally { client.release(); }
+});
+
+// 4. EXCLUIR CONTRATO E LANÇAMENTOS FUTUROS
+app.delete('/deletar-despesa-fixa/:grupoId', async (req, res) => {
+  const { grupoId } = req.params;
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+
+    // Remove o contrato mestre
+    await client.query("DELETE FROM despesas_fixas WHERE id_grupo_vinculo = $1", [grupoId]);
+
+    // Remove apenas as transações futuras (o que já passou fica no histórico)
+    await client.query("DELETE FROM transacoes WHERE id_grupo_fixo = $1 AND data_transacao >= CURRENT_DATE", [grupoId]);
+
+    await client.query('COMMIT');
+    res.json({ mensagem: "Contrato e parcelas futuras removidas!" });
+  } catch (err) {
+    await client.query('ROLLBACK');
+    res.status(500).json({ erro: "Erro ao deletar despesa fixa." });
+  } finally { client.release(); }
+});
+
 
 // --- 6. INICIALIZAÇÃO DO SERVIDOR ---
 const PORT_FINAL = process.env.PORT || 3000;

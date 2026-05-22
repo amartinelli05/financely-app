@@ -1,7 +1,7 @@
 'use client'
 import { useState, useEffect } from 'react'
 
-// AJUSTE: URL Dinâmica
+// URL Dinâmica para local ou produção
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
 
 export default function Perfil() {
@@ -18,20 +18,31 @@ export default function Perfil() {
     const carregarDadosFinanceiros = async () => {
       if (!idUsuario) return
       try {
-        // AJUSTADO: URL dinâmica e filtro por id_usuario
-        const res = await fetch(`${API_URL}/listar-transacoes?id_usuario=${idUsuario}`)
+        // AJUSTADO: Passando o limite alto para trazer todo o histórico para as médias e totais
+        const res = await fetch(`${API_URL}/listar-transacoes?id_usuario=${idUsuario}&limite=999999`)
         const dados = await res.json()
         
-        const listaValida = Array.isArray(dados) ? dados : []
+        // CORREÇÃO CRÍTICA: Extrai a array de dentro de dados.registros por causa da paginação
+        const listaValida = dados && Array.isArray(dados.registros) 
+          ? dados.registros 
+          : (Array.isArray(dados) ? dados : []);
+
         const saldo = listaValida.reduce((acc, t) => acc + parseFloat(t.valor || 0), 0)
         
         setEstatisticas({ totalTransacoes: listaValida.length, saldoAtual: saldo })
       } catch (err) { 
-        console.error("Erro ao carregar dados:", err) 
+        console.error("Erro ao carregar dados no perfil:", err) 
       }
     }
     carregarDadosFinanceiros()
   }, [])
+
+  // CORREÇÃO: Função de logout limpa cookies e storage para o middleware agir
+  const handleLogout = () => {
+    localStorage.clear();
+    document.cookie = "token=; path=/; expires=Thu, 01 Jan 1970 00:00:00 UTC; SameSite=Strict";
+    window.location.href = '/login';
+  }
 
   return (
     <div className="max-w-4xl mx-auto space-y-8 text-black">
@@ -49,8 +60,8 @@ export default function Perfil() {
             <p className="text-slate-400 font-bold text-sm bg-slate-50 inline-block px-4 py-2 rounded-xl">{usuario.email}</p>
           </div>
 
-          <button onClick={() => { localStorage.clear(); window.location.href = '/'; }}
-            className="px-8 py-4 bg-red-50 text-red-500 rounded-2xl font-bold hover:bg-red-100 transition-all text-sm">
+          <button onClick={handleLogout}
+            className="px-8 py-4 bg-red-50 text-red-500 rounded-2xl font-bold hover:bg-red-100 transition-all text-sm whitespace-nowrap self-stretch md:self-auto">
             Sair da Conta
           </button>
         </div>
@@ -87,7 +98,7 @@ export default function Perfil() {
             <div className="p-6 bg-slate-50 rounded-3xl text-center">
               <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Saldo Total</p>
               <p className={`text-xl font-black ${estatisticas.saldoAtual >= 0 ? 'text-emerald-500' : 'text-red-500'}`}>
-                R$ {Math.abs(estatisticas.saldoAtual).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                {estatisticas.saldoAtual < 0 ? '-' : ''} R$ {Math.abs(estatisticas.saldoAtual).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
               </p>
             </div>
           </div>

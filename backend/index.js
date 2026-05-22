@@ -73,21 +73,49 @@ app.post('/login', async (req, res) => {
 });
 
 // --- 2. TRANSAÇÕES (Lançamentos) ---
-
 app.get('/listar-transacoes', async (req, res) => {
-    const { id_usuario } = req.query;
+    const { id_usuario, pagina = 1, limite = 10 } = req.query;
+    
     try {
-        const query = `
+        // Converte para números inteiros seguros
+        const numPagina = Math.max(1, parseInt(pagina));
+        const numLimite = Math.max(1, parseInt(limite));
+        
+        // CORRIGIDO: Removido o (offset) inválido da sintaxe da variável
+        // Página 1: (1 - 1) * 10 = 0 -> Pula 0, pega os primeiros 10
+        // Página 2: (2 - 1) * 10 = 10 -> Pula os primeiros 10, pega os próximos 10
+        const deslocamento = (numPagina - 1) * numLimite;
+
+        // 1. Query para buscar o bloco de transações atual fatiado
+        const queryTransacoes = `
             SELECT t.*, c.nome_categoria, co.nome_conta 
             FROM transacoes t
             LEFT JOIN categorias c ON t.id_categoria = c.id_categoria
             LEFT JOIN contas co ON t.id_conta = co.id_conta
             WHERE t.id_usuario = $1
-            ORDER BY t.id_transacao DESC`;
-        const resultado = await pool.query(query, [id_usuario]);
-        res.json(resultado.rows);
+            ORDER BY t.id_transacao DESC
+            LIMIT $2 OFFSET $3`;
+
+        // 2. Query paralela para contar o TOTAL absoluto de registros do usuário
+        const queryTotal = `SELECT COUNT(*) FROM transacoes WHERE id_usuario = $1`;
+
+        const [resultadoTrans, resultadoTotal] = await Promise.all([
+            pool.query(queryTransacoes, [id_usuario, numLimite, deslocamento]),
+            pool.query(queryTotal, [id_usuario])
+        ]);
+
+        const totalRegistros = parseInt(resultadoTotal.rows[0].count) || 0;
+
+        // Retorna um objeto com os registros fatiados e os metadados de controle
+        res.json({
+            registros: resultadoTrans.rows,
+            temMais: (deslocamento + resultadoTrans.rows.length) < totalRegistros,
+            total: totalRegistros
+        });
+
     } catch (err) {
-        res.status(500).json({ error: 'Erro ao listar transações' });
+        console.error("Erro ao fatiar transações:", err.message);
+        res.status(500).json({ error: 'Erro ao listar transações com paginação.' });
     }
 });
 

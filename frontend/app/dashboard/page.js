@@ -2,12 +2,13 @@
 import { useState, useEffect } from 'react'
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell, PieChart, Pie, Legend } from 'recharts'
 
-// Definindo a URL base que muda entre Local e Produção (Render)
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
 
 export default function Dashboard() {
   const [transacoes, setTransacoes] = useState([])
   const [transacoesFiltradas, setTransacoesFiltradas] = useState([])
+  const [saldosContas, setSaldosContas] = useState([]) // Adicionado para controlar os saldos
+  const [loadingContas, setLoadingContas] = useState(true) // Adicionado para o controle de carregamento
   const [periodo, setPeriodo] = useState('tudo')
 
   const carregarDados = async () => {
@@ -19,16 +20,25 @@ export default function Dashboard() {
         return
       }
 
-      // AJUSTADO: Agora usa a variável API_URL e crases ( ` )
-      const res = await fetch(`${API_URL}/listar-transacoes?id_usuario=${idUsuario}`)
-      const dados = await res.json()
+      // Sincroniza a busca das transações e dos saldos das contas em paralelo
+      const [resTrans, resSaldos] = await Promise.all([
+        fetch(`${API_URL}/listar-transacoes?id_usuario=${idUsuario}`),
+        fetch(`${API_URL}/saldo-por-conta?id_usuario=${idUsuario}`)
+      ])
+
+      const dadosTrans = await resTrans.json()
+      const dadosSaldos = await resSaldos.json()
       
-      const listaValida = Array.isArray(dados) ? dados : []
+      const listaValida = Array.isArray(dadosTrans) ? dadosTrans : []
       setTransacoes(listaValida)
       setTransacoesFiltradas(listaValida)
+      setSaldosContas(Array.isArray(dadosSaldos) ? dadosSaldos : [])
     } catch (err) { 
       console.error("Erro ao buscar dados:", err)
       setTransacoes([])
+      setSaldosContas([])
+    } finally {
+      setLoadingContas(false)
     }
   }
 
@@ -66,7 +76,6 @@ export default function Dashboard() {
   }, [periodo, transacoes])
 
   // --- FUNÇÕES DE AGRUPAMENTO PARA OS GRÁFICOS ---
-
   const resumoGeral = [
     { name: 'Entradas', valor: transacoesFiltradas.filter(t => parseFloat(t.valor) > 0).reduce((acc, t) => acc + parseFloat(t.valor || 0), 0), cor: '#4f46e5' },
     { name: 'Saídas', valor: Math.abs(transacoesFiltradas.filter(t => parseFloat(t.valor) < 0).reduce((acc, t) => acc + parseFloat(t.valor || 0), 0)), cor: '#f43f5e' }
@@ -103,7 +112,7 @@ export default function Dashboard() {
 
   return (
     <div className="space-y-8">
-      {/* HEADER DO DASHBOARD MAIS SUAVE */}
+      {/* HEADER DO DASHBOARD MAIS SUAVE (Mantido idêntico ao original) */}
       <div className="bg-white p-8 rounded-[2.5rem] shadow-xl shadow-slate-100/50 border border-slate-50 flex flex-col md:flex-row justify-between items-center gap-6">
         <div>
           <h2 className="text-3xl font-bold text-slate-800 tracking-tight">Financely Dashboard</h2>
@@ -124,6 +133,54 @@ export default function Dashboard() {
         </div>
       </div>
 
+ {/* CARD: SALDO POR CONTA (Gráfico de Barras) */}
+<div className="bg-white p-10 rounded-[3rem] shadow-xl shadow-slate-100/50 border border-slate-50">
+  <h3 className="text-sm font-bold text-slate-800 mb-10 flex items-center gap-2">
+    <span className="w-1.5 h-6 bg-indigo-600 rounded-full" /> Saldo por Conta
+  </h3>
+  
+  {loadingContas ? (
+    <div className="text-slate-400 animate-pulse font-bold text-sm italic h-64 flex items-center justify-center">
+      Carregando gráfico de saldos...
+    </div>
+  ) : (
+    <div className="h-64">
+      <ResponsiveContainer width="100%" height="100%">
+        <BarChart data={saldosContas.map(c => ({ name: c.nome_conta, valor: parseFloat(c.saldo_atual || 0) }))}>
+          <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+          <XAxis 
+            dataKey="name" 
+            axisLine={false} 
+            tickLine={false} 
+            tick={{fill: '#94a3b8', fontWeight: '600', fontSize: 11}} 
+          />
+          <YAxis 
+            axisLine={false} 
+            tickLine={false} 
+            tick={{fill: '#94a3b8', fontWeight: '600', fontSize: 11}}
+            tickFormatter={(value) => `R$ ${value}`}
+          />
+          <Tooltip 
+            cursor={{fill: 'transparent'}} 
+            contentStyle={{borderRadius: '20px', border: 'none', boxShadow: '0 10px 15px -3px rgba(0,0,0,0.1)'}} 
+            formatter={(value) => [`R$ ${Number(value).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`, 'Saldo Atual']}
+          />
+          {/* Barra com cantos arredondados que muda de cor dinamicamente (Verde se positivo, Vermelho se negativo) */}
+          <Bar dataKey="valor" radius={[10, 10, 0, 0]} barSize={40}>
+            {saldosContas.map((entry, index) => (
+              <Cell 
+                key={index} 
+                fill={parseFloat(entry.saldo_atual || 0) >= 0 ? '#10b981' : '#f43f5e'} 
+              />
+            ))}
+          </Bar>
+        </BarChart>
+      </ResponsiveContainer>
+    </div>
+  )}
+</div>
+
+      {/* GRÁFICOS DO SISTEMA */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
         {/* CARD 1: VOLUME TOTAL */}
         <div className="bg-white p-10 rounded-[3rem] shadow-xl shadow-slate-100/50 border border-slate-50">

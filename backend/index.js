@@ -493,9 +493,13 @@ app.get('/admin-stats', async (req, res) => {
     res.status(500).send("Erro ao carregar os dados do banco.");
   }
 });
-
 // --- MÓDULO DE DESPESAS FIXAS AJUSTADO ---
 
+<<<<<<< HEAD
+// --- MÓDULO DE DESPESAS FIXAS AJUSTADO ---
+
+=======
+>>>>>>> 01d64be88ece46306003f0c956325c8080e388b9
 // 1. LISTAR CONTRATOS FIXOS (Mantido)
 app.get('/listar-despesas-fixas', async (req, res) => {
   const { id_usuario } = req.query;
@@ -660,7 +664,6 @@ app.delete('/deletar-despesa-fixa/:grupoId', async (req, res) => {
     res.status(500).json({ erro: "Erro ao deletar." });
   } finally { client.release(); }
 });
-
 
 // --- 6. INICIALIZAÇÃO DO SERVIDOR ---
 const PORT_FINAL = process.env.PORT || 3000;

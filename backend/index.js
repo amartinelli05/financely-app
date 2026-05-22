@@ -10,31 +10,32 @@ const SECRET_KEY = process.env.JWT_SECRET || "sua_chave_secreta_aqui";
 
 app.use(cors({
   origin: '*',
-  methods: ['GET', 'POST', 'PUT', 'DELETE'],
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH'], // Adicionado PATCH para rotas de status se precisar
   allowedHeaders: ['Content-Type', 'Authorization']
 }));
 app.use(express.json());
 
-// --- CONFIGURAÇÃO DO BANCO (UNIFICADA E ESTÁVEL) ---
+// --- CONFIGURAÇÃO DO BANCO (OTIMIZADA PARA NEON POOLER) ---
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
   ssl: { rejectUnauthorized: false },
-  idleTimeoutMillis: 30000,
-  connectionTimeoutMillis: 2000,
-  max: 10
+  max: 10,                       // Máximo de conexões abertas simultaneamente
+  idleTimeoutMillis: 30000,      // Fecha conexões ociosas após 30 segundos
+  connectionTimeoutMillis: 5000  // Aumentado para 5s para dar mais fôlego no handshake inicial
 });
 
+// Captura desconexões em background sutilmente sem derrubar ou poluir o terminal
 pool.on('error', (err) => {
-  console.error('❌ Erro inesperado no cliente do banco:', err);
+  // Apenas avisa se for um erro que não seja a desconexão comum do pooler ocioso
+  if (!err.message.includes('Connection terminated unexpectedly')) {
+    console.error('❌ Erro inesperado no pool do banco:', err.message);
+  }
 });
 
-pool.connect((err, client, release) => {
-  if (err) {
-    return console.error('❌ ERRO AO CONECTAR NO NEON:', err.stack);
-  }
-  console.log('✅ CONEXÃO COM POSTGRES (NEON) ESTABELECIDA!');
-  release();
-});
+// Teste sutil de conexão ativa usando Queries puras (Evita o bug do release manual)
+pool.query('SELECT NOW()')
+  .then(() => console.log('✅ CONEXÃO COM POSTGRES (NEON) PRONTA E EM EXECUÇÃO!'))
+  .catch(err => console.error('❌ ERRO CRÍTICO AO CONECTAR NO BANCO:', err.message));
 
 // --- 1. AUTENTICAÇÃO ---
 

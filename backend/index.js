@@ -512,7 +512,7 @@ app.get('/listar-despesas-fixas', async (req, res) => {
   }
 });
 
-// 2. CADASTRAR (COM LÓGICA DE DIA DA SEMANA)
+// 2. CADASTRAR (LÓGICA TOTALMENTE BLINDADA CONTRA FUSO E SALTO DE MÊS)
 app.post('/cadastrar-despesa-fixa', async (req, res) => {
   const { id_usuario, id_categoria, id_conta, valor, descricao, dia_vencimento, data_inicio, data_final, frequencia } = req.body;
   const client = await pool.connect();
@@ -521,6 +521,7 @@ app.post('/cadastrar-despesa-fixa', async (req, res) => {
     await client.query('BEGIN');
     const grupoId = require('crypto').randomUUID();
 
+    // Salva o contrato mestre
     await client.query(
       `INSERT INTO despesas_fixas (id_usuario, id_categoria, id_conta, valor, descricao, dia_vencimento, data_inicio, data_final, frequencia, id_grupo_vinculo)
        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
@@ -529,40 +530,58 @@ app.post('/cadastrar-despesa-fixa', async (req, res) => {
 
     const ajustarDiaUtil = (data) => {
       const d = new Date(data);
-      if (d.getDay() === 0) d.setDate(d.getDate() + 1);
-      if (d.getDay() === 6) d.setDate(d.getDate() + 2);
+      if (d.getDay() === 0) d.setDate(d.getDate() + 1); // Domingo -> Segunda
+      if (d.getDay() === 6) d.setDate(d.getDate() + 2); // Sábado -> Segunda
       return d;
     };
 
-    let dataAtual = new Date(data_inicio);
-    const dataLimite = new Date(data_final);
+    // Extrai os componentes numéricos puros (Ignora fuso horário de string)
+    const [anoInic, mesInic, diaInic] = data_inicio.split('-').map(Number);
+    const [anoFim, mesFim, diaFim] = data_final.split('-').map(Number);
 
-    // Se for semanal, ajusta a data inicial para o primeiro dia da semana correspondente
-    if (frequencia === 'semanal') {
-      const alvo = parseInt(dia_vencimento); // 0 (Dom) a 6 (Sab)
+    if (frequencia === 'mensal') {
+      // Descobre quantos meses existem de intervalo entre o início e o fim do contrato
+      const totalMeses = ((anoFim - anoInic) * 12) + (mesFim - mesInic);
+
+      for (let i = 0; i <= totalMeses; i++) {
+        // Cria uma data nova do zero para cada parcela usando matemática pura
+        let anoParcela = anoInic;
+        let mesParcela = (mesInic - 1) + i; // mesInic - 1 porque Janeiro é 0 no JS
+
+        // Se a soma dos meses passar de 11 (Dezembro), o construtor do Date() do JS corrige o ano automaticamente!
+        let dataParcela = new Date(anoParcela, mesParcela, parseInt(dia_vencimento));
+
+        // Validação de segurança: a parcela precisa respeitar o teto do contrato
+        const dataLimite = new Date(anoFim, mesFim - 1, diaFim);
+        const dataMinima = new Date(anoInic, mesInic - 1, diaInic);
+
+        if (dataParcela >= dataMinima && dataParcela <= dataLimite) {
+          const dataFinalAjustada = ajustarDiaUtil(dataParcela);
+          
+          await client.query(
+            `INSERT INTO transacoes (id_usuario, id_categoria, id_conta, valor, descricao, data_transacao, tipo_movimento, id_grupo_fixo)
+             VALUES ($1, $2, $3, $4, $5, $6, 'Saída', $7)`,
+            [id_usuario, id_categoria, id_conta, -Math.abs(valor), `${descricao} (Fixo)`, dataFinalAjustada, grupoId]
+          );
+        }
+      }
+    } else {
+      // Mantém a lógica semanal isolada caso utilize
+      let dataAtual = new Date(anoInic, mesInic - 1, diaInic);
+      const dataLimite = new Date(anoFim, mesFim - 1, diaFim);
+
+      const alvo = parseInt(dia_vencimento);
       const diff = (alvo - dataAtual.getDay() + 7) % 7;
       dataAtual.setDate(dataAtual.getDate() + diff);
-    }
 
-    while (dataAtual <= dataLimite) {
-      let dataParcela = new Date(dataAtual);
-      
-      if (frequencia === 'mensal') {
-        dataParcela.setDate(parseInt(dia_vencimento));
-        // Se o ajuste de data resultou em um mês diferente (ex: dia 31 em fevereiro), o JS corrige automaticamente
-      }
-
-      const dataFinalAjustada = ajustarDiaUtil(dataParcela);
-      
-      await client.query(
-        `INSERT INTO transacoes (id_usuario, id_categoria, id_conta, valor, descricao, data_transacao, tipo_movimento, id_grupo_fixo)
-         VALUES ($1, $2, $3, $4, $5, $6, 'Saída', $7)`,
-        [id_usuario, id_categoria, id_conta, -Math.abs(valor), `${descricao} (Fixo)`, dataFinalAjustada, grupoId]
-      );
-
-      if (frequencia === 'mensal') {
-        dataAtual.setMonth(dataAtual.getMonth() + 1);
-      } else {
+      while (dataAtual <= dataLimite) {
+        const dataFinalAjustada = ajustarDiaUtil(new Date(dataAtual));
+        
+        await client.query(
+          `INSERT INTO transacoes (id_usuario, id_categoria, id_conta, valor, descricao, data_transacao, tipo_movimento, id_grupo_fixo)
+           VALUES ($1, $2, $3, $4, $5, $6, 'Saída', $7)`,
+          [id_usuario, id_categoria, id_conta, -Math.abs(valor), `${descricao} (Fixo)`, dataFinalAjustada, grupoId]
+        );
         dataAtual.setDate(dataAtual.getDate() + 7);
       }
     }
@@ -571,7 +590,80 @@ app.post('/cadastrar-despesa-fixa', async (req, res) => {
     res.status(201).json({ mensagem: "Contrato e parcelas geradas!" });
   } catch (err) {
     await client.query('ROLLBACK');
-    res.status(500).json({ erro: "Erro ao processar." });
+    console.error(err);
+    res.status(500).json({ erro: "Erro ao processar cadastro." });
+  } finally { client.release(); }
+});
+
+// 3. EDITAR COMPLETO (RE-GERA PARCELAS FUTURAS CORRIGIDO)
+app.put('/editar-despesa-fixa/:grupoId', async (req, res) => {
+  const { grupoId } = req.params;
+  const { valor, descricao, id_categoria, id_conta, dia_vencimento, data_final, frequencia } = req.body;
+  const client = await pool.connect();
+
+  try {
+    await client.query('BEGIN');
+    
+    await client.query(
+      `UPDATE despesas_fixas 
+       SET valor = $1, descricao = $2, id_categoria = $3, id_conta = $4, dia_vencimento = $5, data_final = $6, frequencia = $7 
+       WHERE id_grupo_vinculo = $8`,
+      [valor, descricao, id_categoria, id_conta, dia_vencimento, data_final, frequencia, grupoId]
+    );
+
+    // Remove apenas os lançamentos que venceriam de hoje para a frente
+    await client.query(
+      "DELETE FROM transacoes WHERE id_grupo_fixo = $1 AND data_transacao >= CURRENT_DATE",
+      [grupoId]
+    );
+
+    const hoje = new Date();
+    let dataAtual = new Date(hoje.getFullYear(), hoje.getMonth(), hoje.getDate());
+    const [anoFim, mesFim, diaFim] = data_final.split('-').map(Number);
+    const dataLimite = new Date(anoFim, mesFim - 1, diaFim);
+
+    if (frequencia === 'semanal') {
+      const alvo = parseInt(dia_vencimento);
+      const diff = (alvo - dataAtual.getDay() + 7) % 7;
+      dataAtual.setDate(dataAtual.getDate() + diff);
+    }
+
+    const ajustarDiaUtil = (data) => {
+      const d = new Date(data);
+      if (d.getDay() === 0) d.setDate(d.getDate() + 1);
+      if (d.getDay() === 6) d.setDate(d.getDate() + 2);
+      return d;
+    };
+
+    const resUser = await client.query("SELECT id_usuario FROM despesas_fixas WHERE id_grupo_vinculo = $1", [grupoId]);
+    const id_usuario = resUser.rows[0].id_usuario;
+
+    while (dataAtual <= dataLimite) {
+      let dataParcela = new Date(dataAtual);
+      if (frequencia === 'mensal') {
+        dataParcela = new Date(dataAtual.getFullYear(), dataAtual.getMonth(), parseInt(dia_vencimento));
+      }
+
+      if (dataParcela >= new Date(hoje.getFullYear(), hoje.getMonth(), hoje.getDate()) && dataParcela <= dataLimite) {
+        const dataFinalAjustada = ajustarDiaUtil(dataParcela);
+        
+        await client.query(
+          `INSERT INTO transacoes (id_usuario, id_categoria, id_conta, valor, descricao, data_transacao, tipo_movimento, id_grupo_fixo)
+           VALUES ($1, $2, $3, $4, $5, $6, 'Saída', $7)`,
+          [id_usuario, id_categoria, id_conta, -Math.abs(valor), `${descricao} (Fixo)`, dataFinalAjustada, grupoId]
+        );
+      }
+
+      if (frequencia === 'mensal') dataAtual.setMonth(dataAtual.getMonth() + 1);
+      else dataAtual.setDate(dataAtual.getDate() + 7);
+    }
+
+    await client.query('COMMIT');
+    res.json({ mensagem: "Contrato e lançamentos atualizados!" });
+  } catch (err) {
+    await client.query('ROLLBACK');
+    console.error(err);
+    res.status(500).json({ erro: "Erro ao atualizar contrato." });
   } finally { client.release(); }
 });
 

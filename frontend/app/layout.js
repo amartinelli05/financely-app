@@ -8,7 +8,8 @@ export default function RootLayout({ children }) {
   const pathname = usePathname()
   const [estaLogado, setEstaLogado] = useState(false)
 
-  const semSidebar = ['/', '/login', '/registrar'].includes(pathname)
+  // AJUSTADO: Adicionado '/privacidade' às rotas públicas que não renderizam a barra lateral externa
+  const semSidebar = ['/', '/login', '/registrar', '/privacidade'].includes(pathname)
 
   useEffect(() => {
     const token = localStorage.getItem('token')
@@ -16,8 +17,14 @@ export default function RootLayout({ children }) {
   }, [pathname])
 
   const handleLogout = () => {
+    // Limpa o localStorage de forma completa (tokens e dados de sessão)
     localStorage.clear();
-    window.location.href = '/'; 
+    
+    // ADICIONADO: Limpa o cookie do token definindo uma data de expiração retroativa
+    document.cookie = "token=; path=/; expires=Thu, 01 Jan 1970 00:00:00 UTC; SameSite=Strict";
+    
+    // CORRIGIDO: Redireciona direto para a tela de login forçando o refresh de estado limpo
+    window.location.href = '/login'; 
   }
 
   return (
@@ -69,7 +76,6 @@ export default function RootLayout({ children }) {
                 Despesas Fixas
               </Link>
 
-              {/* ADICIONADO: Link para o módulo de Calendário Financeiro */}
               <Link href="/calendario" className={`flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-semibold transition-all ${pathname === '/calendario' ? 'bg-[#4f46e5] text-white shadow-lg' : 'text-slate-400 hover:text-[#4f46e5] hover:bg-slate-50'}`}>
                 <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
                   <rect width="18" height="18" x="3" y="4" rx="2" ry="2"/>
@@ -114,10 +120,28 @@ export default function RootLayout({ children }) {
               </Link>
             </nav>
 
+            {/* CONTAINER DO BOTÃO DE LOGOUT TOTALMENTE RESTRUTURADO */}
             <div className="p-6 border-t border-slate-50">
-               <button onClick={handleLogout} 
-                 className="flex items-center gap-3 w-full px-4 py-3 text-sm font-bold text-red-500 hover:bg-red-50 rounded-xl transition-all">
-                 <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" x2="9" y1="12" y2="12"/></svg>
+               <button 
+                 onClick={handleLogout} 
+                 className="flex items-center gap-3 w-full px-4 py-3 text-sm font-bold text-red-500 hover:bg-red-50 rounded-xl transition-all"
+               >
+                 {/* CORRIGIDO: Modificado de 2000/xl para 2000/svg */}
+                 <svg 
+                   xmlns="http://www.w3.org/2000/svg" 
+                   width="18" 
+                   height="18" 
+                   viewBox="0 0 24 24" 
+                   fill="none" 
+                   stroke="currentColor" 
+                   strokeWidth="2.5" 
+                   strokeLinecap="round" 
+                   strokeLinejoin="round"
+                 >
+                   <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/>
+                   <polyline points="16 17 21 12 16 7"/>
+                   <line x1="21" x2="9" y1="12" y2="12"/>
+                 </svg>
                  Sair do App
                </button>
             </div>

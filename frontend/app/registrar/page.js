@@ -3,20 +3,29 @@ import { useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 
-// AJUSTE: URL Dinâmica para Vercel/Local
+// URL Dinâmica para Vercel/Local
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
 
 export default function Registrar() {
   const [nome, setNome] = useState('')
   const [email, setEmail] = useState('')
   const [senha, setSenha] = useState('')
+  const [aceitouTermos, setAceitouTermos] = useState(false) // ADICIONADO: Estado para consentimento LGPD
+  const [loading, setLoading] = useState(false)
   const router = useRouter()
 
   const handleRegister = async (e) => {
     e.preventDefault();
 
+    // ADICIONADO: Bloqueio de segurança caso o checkbox não esteja marcado
+    if (!aceitouTermos) {
+      alert('⚠️ Você precisa declarar ciência sobre o tratamento de dados para continuar.');
+      return;
+    }
+
+    setLoading(true);
+
     try {
-      // AJUSTADO: Usando crases e API_URL
       const response = await fetch(`${API_URL}/registrar`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -33,6 +42,8 @@ export default function Registrar() {
     } catch (error) {
       console.error("Erro na conexão:", error);
       alert("Não foi possível conectar ao servidor.");
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -51,7 +62,7 @@ export default function Registrar() {
 
       <div className="absolute bottom-[-10%] left-[-10%] w-[50%] h-[50%] bg-purple-100/40 rounded-full blur-[120px] -z-10"></div>
 
-      <Link href="/" className="absolute top-10 left-10 flex items-center gap-2 text-slate-400 hover:text-indigo-600 font-bold transition-all z-20 group text-black">
+      <Link href="/" className="absolute top-10 left-10 flex items-center gap-2 text-slate-400 hover:text-indigo-600 font-bold transition-all z-20 group">
         <span className="text-xl group-hover:-translate-x-1 transition-transform">←</span> Voltar
       </Link>
 
@@ -83,15 +94,35 @@ export default function Registrar() {
             className="w-full p-5 bg-slate-50 rounded-2xl border-none outline-none focus:ring-2 focus:ring-purple-100 transition-all font-medium text-black"
             onChange={(e) => setSenha(e.target.value)}
           />
+
+          {/* ADICIONADO: COMPONENTE DE CHECKBOX DA LGPD INTEGRADO AO VISUAL */}
+          <div className="flex items-start gap-3 p-4 bg-slate-50/60 rounded-2xl border border-slate-100/80 mt-2">
+            <input 
+              type="checkbox" 
+              id="lgpd"
+              checked={aceitouTermos}
+              onChange={(e) => setAceitouTermos(e.target.checked)}
+              className="mt-1 w-4 h-4 rounded text-purple-600 border-slate-300 focus:ring-purple-500 cursor-pointer accent-purple-600"
+              required
+            />
+            <label htmlFor="lgpd" className="text-[11px] font-semibold text-slate-500 leading-tight cursor-pointer select-none">
+              Estou ciente e concordo com a coleta e tratamento dos meus dados cadastrais e movimentações financeiras conforme estabelecido no{' '}
+              <Link href="/privacidade" className="text-purple-600 underline font-black hover:text-purple-700">
+                Aviso de privacidade
+              </Link>.
+            </label>
+          </div>
+
           <button 
             type="submit" 
-            className="w-full py-5 bg-gradient-to-r from-purple-600 to-indigo-600 text-white rounded-[2rem] font-bold shadow-xl shadow-purple-100 hover:scale-[1.02] transition-all"
+            disabled={loading}
+            className="w-full py-5 bg-gradient-to-r from-purple-600 to-indigo-600 text-white rounded-[2rem] font-bold shadow-xl shadow-purple-100 hover:scale-[1.02] active:scale-[0.98] transition-all disabled:opacity-50"
           >
-            Finalizar Cadastro
+            {loading ? 'Processando...' : 'Finalizar Cadastro'}
           </button>
         </form>
 
-        <p className="text-center mt-8 text-slate-400 font-medium text-black">
+        <p className="text-center mt-8 text-slate-400 font-medium">
           Já possui conta? <Link href="/login" className="text-purple-600 font-black hover:underline">Entrar</Link>
         </p>
       </div>

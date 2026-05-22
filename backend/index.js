@@ -177,7 +177,6 @@ app.delete('/deletar-transacao/:id', async (req, res) => {
     client.release();
   }
 });
-
 app.put('/editar-transacao/:id', async (req, res) => {
   const { id } = req.params;
   const { descricao, valor, id_categoria, id_conta, data_transacao, tipo_movimento } = req.body;
@@ -186,10 +185,23 @@ app.put('/editar-transacao/:id', async (req, res) => {
   try {
     await client.query('BEGIN');
 
-    // 1. Garantir o sinal correto do valor
-    const valorAjustado = tipo_movimento === 'Saída' ? -Math.abs(valor) : Math.abs(valor);
+    // 1. Buscar os dados da transação ANTES da edição (para saber a conta antiga)
+    const transacaoAntigaRes = await client.query(
+      'SELECT id_conta FROM transacoes WHERE id_transacao = $1',
+      [id]
+    );
 
-    // 2. Atualizar a transação
+    if (transacaoAntigaRes.rows.length === 0) {
+      await client.query('ROLLBACK');
+      return res.status(404).json({ erro: "Lançamento não encontrado." });
+    }
+
+    const idContaAntiga = transacaoAntigaRes.rows[0].id_conta;
+
+    // 2. Garantir o sinal correto do valor conforme o tipo de movimento
+    const valorAjustado = tipo_movimento === 'Saída' ? -Math.abs(parseFloat(valor)) : Math.abs(parseFloat(valor));
+
+    // 3. Atualizar a transação no banco de dados
     await client.query(
       `UPDATE transacoes 
        SET descricao = $1, valor = $2, id_categoria = $3, id_conta = $4, data_transacao = $5, tipo_movimento = $6 
@@ -197,21 +209,49 @@ app.put('/editar-transacao/:id', async (req, res) => {
       [descricao, valorAjustado, id_categoria, id_conta, data_transacao, tipo_movimento, id]
     );
 
-    // 3. Recalcular saldo da conta afetada
-    const somaRes = await client.query('SELECT COALESCE(SUM(valor), 0) as total FROM transacoes WHERE id_conta = $1', [id_conta]);
-    const contaRes = await client.query('SELECT saldo_inicial FROM contas WHERE id_conta = $1', [id_conta]);
-    
-    if (contaRes.rows.length > 0) {
-      const novoSaldo = (parseFloat(contaRes.rows[0].saldo_inicial) || 0) + (parseFloat(somaRes.rows[0].total) || 0);
-      await client.query('UPDATE contas SET saldo_atual = $1 WHERE id_conta = $2', [novoSaldo, id_conta]);
+    // 4. FUNÇÃO AUXILIAR: Recalcula o saldo de uma conta de forma matemática pura e segura
+    const atualizarSaldoConta = async (idDaConta) => {
+      if (!idDaConta) return;
+      
+      // Soma todas as transações atuais daquela conta
+      const somaRes = await client.query(
+        'SELECT COALESCE(SUM(valor), 0) as total FROM transacoes WHERE id_conta = $1', 
+        [idDaConta]
+      );
+      
+      // Busca o saldo inicial cadastrado no banco Neon
+      const contaRes = await client.query(
+        'SELECT saldo_inicial FROM contas WHERE id_conta = $1', 
+        [idDaConta]
+      );
+
+      if (contaRes.rows.length > 0) {
+        const saldoInicial = parseFloat(contaRes.rows[0].saldo_inicial) || 0;
+        const totalTransacoes = parseFloat(somaRes.rows[0].total) || 0;
+        const novoSaldo = saldoInicial + totalTransacoes;
+
+        // Grava o saldo real definitivo
+        await client.query(
+          'UPDATE contas SET saldo_atual = $1 WHERE id_conta = $2', 
+          [novoSaldo, idDaConta]
+        );
+      }
+    };
+
+    // 5. Atualiza a conta que recebeu a transação (Nova)
+    await atualizarSaldoConta(id_conta);
+
+    // 6. Se o usuário alterou a conta do lançamento, atualiza também a conta anterior (Antiga)
+    if (Number(idContaAntiga) !== Number(id_conta)) {
+      await atualizarSaldoConta(idContaAntiga);
     }
 
     await client.query('COMMIT');
-    res.json({ mensagem: "Editado e saldo recalculado!" });
+    res.json({ mensaje: "Lançamento editado e saldos sincronizados com sucesso!" });
   } catch (err) {
     await client.query('ROLLBACK');
-    console.error(err);
-    res.status(500).json({ erro: "Erro ao editar transação." });
+    console.error("ERRO CRÍTICO AO EDITAR LANÇAMENTO:", err.message);
+    res.status(500).json({ erro: "Erro interno ao processar alteração do lançamento." });
   } finally {
     client.release();
   }
@@ -758,4 +798,35 @@ app.listen(PORT_FINAL, '0.0.0.0', () => {
   console.log(`🚀 Financely online na porta ${PORT_FINAL}`);
 });
 
-// --- 7 
+// --- ROTA DO CALENDÁRIO FINANCEIRO ---
+app.get('/api/calendario-previsto', async (req, res) => {
+  const { id_usuario } = req.query;
+  
+  if (!id_usuario) {
+    return res.status(400).json({ erro: "Usuário não identificado." });
+  }
+
+  try {
+    // Busca transações futuras ou do mês atual para preencher o calendário
+    // Filtramos para trazer o panorama de planejamento
+    const query = `
+      SELECT 
+        id_transacao,
+        descricao,
+        valor,
+        tipo_movimento,
+        id_categoria,
+        -- Garante o envio da data limpa no formato YYYY-MM-DD para o front não sofrer com fuso
+        TO_CHAR(data_transacao, 'YYYY-MM-DD') as data_formatada
+      FROM transacoes
+      WHERE id_usuario = $1
+      ORDER BY data_transacao ASC
+    `;
+    
+    const resultado = await pool.query(query, [id_usuario]);
+    res.json(resultado.rows);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ erro: "Erro ao carregar dados do calendário." });
+  }
+});

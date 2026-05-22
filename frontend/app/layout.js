@@ -51,7 +51,7 @@ export default function RootLayout({ children }) {
               </div>
             </div>
             
-            <nav className="flex-1 px-6 space-y-2 flex flex-col">
+            <nav className="flex-1 px-6 space-y-2 flex flex-col overflow-y-auto [&::-webkit-scrollbar]:w-1 [&::-webkit-scrollbar-thumb]:bg-slate-100">
               <Link href="/dashboard" className={`flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-semibold transition-all ${pathname === '/dashboard' ? 'bg-[#4f46e5] text-white shadow-lg' : 'text-slate-400 hover:text-[#4f46e5] hover:bg-slate-50'}`}>
                 <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><rect width="7" height="9" x="3" y="3" rx="1"/><rect width="7" height="5" x="14" y="3" rx="1"/><rect width="7" height="9" x="14" y="12" rx="1"/><rect width="7" height="5" x="3" y="15" rx="1"/></svg>
                 Dashboard
@@ -62,12 +62,22 @@ export default function RootLayout({ children }) {
                 Lançamentos
               </Link>
 
-              {/* ÍCONE ALTERADO: Agora usa um símbolo de "Refresh/Recorrência" */}
               <Link href="/despesas" className={`flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-semibold transition-all ${pathname === '/despesas' ? 'bg-[#4f46e5] text-white shadow-lg' : 'text-slate-400 hover:text-[#4f46e5] hover:bg-slate-50'}`}>
                 <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
                     <path d="M21 2v6h-6"/><path d="M3 12a9 9 0 0 1 15-6.7L21 8"/><path d="M3 22v-6h6"/><path d="M21 12a9 9 0 0 1-15 6.7L3 16"/>
                 </svg>
                 Despesas Fixas
+              </Link>
+
+              {/* ADICIONADO: Link para o módulo de Calendário Financeiro */}
+              <Link href="/calendario" className={`flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-semibold transition-all ${pathname === '/calendario' ? 'bg-[#4f46e5] text-white shadow-lg' : 'text-slate-400 hover:text-[#4f46e5] hover:bg-slate-50'}`}>
+                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                  <rect width="18" height="18" x="3" y="4" rx="2" ry="2"/>
+                  <line x1="16" x2="16" y1="2" y2="6"/>
+                  <line x1="8" x2="8" y1="2" y2="6"/>
+                  <line x1="3" x2="21" y1="10" y2="10"/>
+                </svg>
+                Calendário
               </Link>
 
               <Link href="/relatorios" className={`flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-semibold transition-all ${pathname === '/relatorios' ? 'bg-[#4f46e5] text-white shadow-lg' : 'text-slate-400 hover:text-[#4f46e5] hover:bg-slate-50'}`}>

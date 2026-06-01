@@ -22,17 +22,22 @@ export default function Dashboard() {
         return
       }
 
+      setLoadingContas(true)
+      setLoadingMetas(true)
+
       const [resTrans, resSaldos, resMetas] = await Promise.all([
-        fetch(`${API_URL}/listar-transacoes?id_usuario=${idUsuario}`),
+        fetch(`${API_URL}/listar-transacoes?id_usuario=${idUsuario}&limite=999999`),
         fetch(`${API_URL}/saldo-por-conta?id_usuario=${idUsuario}`),
         fetch(`${API_URL}/listar-metas?id_usuario=${idUsuario}`)
       ])
 
-      const dadosTrans = await resTrans.json()
-      const dadosSaldos = await resSaldos.json()
-      const dadosMetas = await resMetas.json()
+      const dadosTrans = resTrans.ok ? await resTrans.json() : []
+      const dadosSaldos = resSaldos.ok ? await resSaldos.json() : []
+      const dadosMetas = resMetas.ok ? await resMetas.json() : []
       
-      const listaValida = Array.isArray(dadosTrans) ? dadosTrans : []
+      // CORREÇÃO: Extrai corretamente os registros se o backend retornar formato paginado
+      const listaValida = Array.isArray(dadosTrans) ? dadosTrans : (dadosTrans.registros || [])
+      
       setTransacoes(listaValida)
       setTransacoesFiltradas(listaValida)
       setSaldosContas(Array.isArray(dadosSaldos) ? dadosSaldos : [])
@@ -139,7 +144,7 @@ export default function Dashboard() {
   }
 
   return (
-    <div className="space-y-8 p-2 bg-slate-50/30 min-h-screen text-black">
+    <div className="space-y-8 p-2 bg-slate-50/30 min-h-screen text-black pb-20">
       {/* HEADER DO DASHBOARD */}
       <div className="bg-white p-8 rounded-[2.5rem] shadow-xl shadow-slate-100/40 border border-slate-100 flex flex-col md:flex-row justify-between items-center gap-6">
         <div>
@@ -161,11 +166,9 @@ export default function Dashboard() {
         </div>
       </div>
 
-      {/* SEÇÃO PRINCIPAL DE GRÁFICOS: GRID DE DUAS COLUNAS PERFEITO */}
+      {/* SEÇÃO PRINCIPAL DE GRÁFICOS */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
 
-        {/* --- LINHA 1: ANÁLISE DE CONTAS BANCÁRIAS --- */}
-        
         {/* 1. CARD: SALDO POR CONTA */}
         <div className="bg-white p-10 rounded-[3rem] shadow-xl shadow-slate-100/40 border border-slate-100 flex flex-col justify-between">
           <div>
@@ -217,8 +220,6 @@ export default function Dashboard() {
           </div>
         </div>
 
-        {/* --- LINHA 2: VOLUMES GERAIS E OBJETIVOS --- */}
-
         {/* 3. CARD: VOLUME TOTAL */}
         <div className="bg-white p-10 rounded-[3rem] shadow-xl shadow-slate-100/40 border border-slate-100">
           <h3 className="text-sm font-bold text-slate-800 mb-10 flex items-center gap-2">
@@ -229,7 +230,7 @@ export default function Dashboard() {
               <BarChart data={resumoGeral}>
                 <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
                 <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{fill: '#94a3b8', fontWeight: '600'}} />
-                <Tooltip cursor={{fill: 'transparent'}} contentStyle={{borderRadius: '16px', border: 'none', boxShadow: '0 10px 25px -5px rgba(0,0,0,0.05)'}} />
+                <Tooltip cursor={{fill: 'transparent'}} contentStyle={{borderRadius: '16px', border: 'none', boxShadow: '0 10px 25px -5px rgba(0,0,0,0.05)'}} formatter={(value) => [`R$ ${Number(value).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`]} />
                 <Bar dataKey="valor" radius={[12, 12, 12, 12]} barSize={45}>
                   {resumoGeral.map((entry, index) => <Cell key={index} fill={entry.cor} />)}
                 </Bar>
@@ -291,8 +292,6 @@ export default function Dashboard() {
           </div>
         </div>
 
-        {/* --- LINHA 3: CATEGORIAS E CONSUMO --- */}
-
         {/* 5. CARD: ENTRADAS / CATEGORIA */}
         <div className="bg-white p-10 rounded-[3rem] shadow-xl shadow-slate-100/40 border border-slate-100">
           <h3 className="text-sm font-bold text-slate-800 mb-10 flex items-center gap-2">
@@ -304,7 +303,7 @@ export default function Dashboard() {
                 <Pie data={dadosEntradas()} innerRadius={65} outerRadius={85} paddingAngle={4} dataKey="value">
                   {dadosEntradas().map((entry, index) => <Cell key={index} fill={['#4f46e5', '#10b981', '#fbbf24', '#f43f5e'][index % 4]} />)}
                 </Pie>
-                <Tooltip contentStyle={{borderRadius: '16px', border: 'none', boxShadow: '0 10px 25px -5px rgba(0,0,0,0.05)'}} />
+                <Tooltip contentStyle={{borderRadius: '16px', border: 'none', boxShadow: '0 10px 25px -5px rgba(0,0,0,0.05)'}} formatter={(value) => [`R$ ${Number(value).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`]} />
                 <Legend iconType="circle" wrapperStyle={{paddingTop: '20px', fontSize: '12px'}} />
               </PieChart>
             </ResponsiveContainer>
@@ -321,7 +320,7 @@ export default function Dashboard() {
               <BarChart data={dadosSaidas()} layout="vertical" margin={{ left: 30 }}>
                 <XAxis type="number" hide />
                 <YAxis dataKey="name" type="category" axisLine={false} tickLine={false} tick={{fill: '#64748b', fontSize: 11, fontWeight: '600'}} />
-                <Tooltip contentStyle={{borderRadius: '16px', border: 'none', boxShadow: '0 10px 25px -5px rgba(0,0,0,0.05)'}} />
+                <Tooltip contentStyle={{borderRadius: '16px', border: 'none', boxShadow: '0 10px 25px -5px rgba(0,0,0,0.05)'}} formatter={(value) => [`R$ ${Number(value).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`]} />
                 <Bar dataKey="value" fill="#f43f5e" radius={[0, 8, 8, 0]} barSize={22} />
               </BarChart>
             </ResponsiveContainer>
@@ -338,9 +337,10 @@ export default function Dashboard() {
               <BarChart data={dadosBalanco()}>
                 <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
                 <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{fill: '#94a3b8', fontSize: 11, fontWeight: '600'}} />
-                <Tooltip contentStyle={{borderRadius: '16px', border: 'none', boxShadow: '0 10px 25px -5px rgba(0,0,0,0.05)'}} />
-                <Bar dataKey="entradas" fill="#10b981" radius={[6, 6, 0, 0]} barSize={16} />
-                <Bar dataKey="saidas" fill="#f43f5e" radius={[6, 6, 0, 0]} barSize={16} />
+                <Tooltip contentStyle={{borderRadius: '16px', border: 'none', boxShadow: '0 10px 25px -5px rgba(0,0,0,0.05)'}} formatter={(value) => [`R$ ${Number(value).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`]} />
+                <Legend iconType="circle" />
+                <Bar name="Entradas" dataKey="entradas" fill="#10b981" radius={[6, 6, 0, 0]} barSize={16} />
+                <Bar name="Saídas" dataKey="saidas" fill="#f43f5e" radius={[6, 6, 0, 0]} barSize={16} />
               </BarChart>
             </ResponsiveContainer>
           </div>

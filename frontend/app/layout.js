@@ -8,7 +8,6 @@ export default function RootLayout({ children }) {
   const pathname = usePathname()
   const [estaLogado, setEstaLogado] = useState(false)
 
-  // AJUSTADO: Adicionado '/privacidade' às rotas públicas que não renderizam a barra lateral externa
   const semSidebar = ['/', '/login', '/registrar', '/privacidade'].includes(pathname)
 
   useEffect(() => {
@@ -17,13 +16,8 @@ export default function RootLayout({ children }) {
   }, [pathname])
 
   const handleLogout = () => {
-    // Limpa o localStorage de forma completa (tokens e dados de sessão)
     localStorage.clear();
-    
-    // ADICIONADO: Limpa o cookie do token definindo uma data de expiração retroativa
     document.cookie = "token=; path=/; expires=Thu, 01 Jan 1970 00:00:00 UTC; SameSite=Strict";
-    
-    // CORRIGIDO: Redireciona direto para a tela de login forçando o refresh de estado limpo
     window.location.href = '/login'; 
   }
 
@@ -65,7 +59,7 @@ export default function RootLayout({ children }) {
               </Link>
               
               <Link href="/lancamentos" className={`flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-semibold transition-all ${pathname === '/lancamentos' ? 'bg-[#4f46e5] text-white shadow-lg' : 'text-slate-400 hover:text-[#4f46e5] hover:bg-slate-50'}`}>
-                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M4 2v20l2-1 2 1 2-1 2 1 2-1 2 1 2-1 2 1V2l-2 1-2-1-2 1-2-1-2 1-2-1-2 1-2-1Z"/><path d="M16 8h-6a2 2 0 1 0 0 4h4a2 2 0 1 1 0 4H8"/><path d="M12 17.5V6.5"/></svg>
+                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M4 2v20l2-1 2 1 2-1 2 1 2-1 2 1 2-1 2 1V2l-2 1-2-1-2 1-2-1-2 1-2-1-2 1-2-1-2 1-2-1Z"/><path d="M16 8h-6a2 2 0 1 0 0 4h4a2 2 0 1 1 0 4H8"/><path d="M12 17.5V6.5"/></svg>
                 Lançamentos
               </Link>
 
@@ -112,32 +106,28 @@ export default function RootLayout({ children }) {
                 Metas
               </Link>
 
-               <Link href="/perfil" className={`flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-semibold transition-all ${pathname === '/perfil' ? 'bg-[#4f46e5] text-white shadow-lg' : 'text-slate-400 hover:text-[#4f46e5] hover:bg-slate-50'}`}>
+              <Link href="/perfil" className={`flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-semibold transition-all ${pathname === '/perfil' ? 'bg-[#4f46e5] text-white shadow-lg' : 'text-slate-400 hover:text-[#4f46e5] hover:bg-slate-50'}`}>
                 <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
                   <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/>
                 </svg>
                 Meu Perfil
               </Link>
+
+              {/* LINK DE AVALIAÇÃO */}
+              <a href="https://docs.google.com/forms/d/e/1FAIpQLSd-mVn7pRYeTXUSXND2E9Pwyknnh_hxu0JNKtx-bmKv8eVR_A/viewform?usp=sharing&ouid=106881321228026920256" target="_blank" rel="noopener noreferrer" className="flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-semibold text-slate-400 hover:text-indigo-600 hover:bg-slate-50 transition-all">
+                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                  <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>
+                </svg>
+                Avalie o Sistema
+              </a>
             </nav>
 
-            {/* CONTAINER DO BOTÃO DE LOGOUT TOTALMENTE RESTRUTURADO */}
             <div className="p-6 border-t border-slate-50">
                <button 
                  onClick={handleLogout} 
                  className="flex items-center gap-3 w-full px-4 py-3 text-sm font-bold text-red-500 hover:bg-red-50 rounded-xl transition-all"
                >
-                 {/* CORRIGIDO: Modificado de 2000/xl para 2000/svg */}
-                 <svg 
-                   xmlns="http://www.w3.org/2000/svg" 
-                   width="18" 
-                   height="18" 
-                   viewBox="0 0 24 24" 
-                   fill="none" 
-                   stroke="currentColor" 
-                   strokeWidth="2.5" 
-                   strokeLinecap="round" 
-                   strokeLinejoin="round"
-                 >
+                 <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
                    <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/>
                    <polyline points="16 17 21 12 16 7"/>
                    <line x1="21" x2="9" y1="12" y2="12"/>

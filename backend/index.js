@@ -420,6 +420,34 @@ app.get('/saldo-por-conta', async (req, res) => {
   }
 });
 
+app.get('/saldo-geral/:id_usuario', async (req, res) => {
+  const { id_usuario } = req.params;
+  try {
+    // ESSENCIAL: O saldo deve olhar APENAS até HOJE
+    const query = `
+      SELECT SUM(valor) as saldo_real
+      FROM transacoes 
+      WHERE id_usuario = $1 
+      AND data_transacao <= CURRENT_DATE`; // <--- O filtro mágico aqui
+      
+    const resultado = await pool.query(query, [id_usuario]);
+    res.json({ saldo: parseFloat(resultado.rows[0].saldo_real || 0) });
+  } catch (err) {
+    res.status(500).json({ erro: "Erro ao calcular saldo." });
+  }
+});
+
+app.get('/saldo-total-contas/:id_usuario', async (req, res) => {
+  const { id_usuario } = req.params;
+  try {
+    const query = `SELECT SUM(saldo_atual) as total FROM contas WHERE id_usuario = $1`;
+    const resultado = await pool.query(query, [id_usuario]);
+    res.json({ saldoTotal: parseFloat(resultado.rows[0].total || 0) });
+  } catch (err) {
+    res.status(500).json({ erro: "Erro ao buscar saldo" });
+  }
+});
+
 // --- 5. METAS E ADMIN ---
 
 app.get('/listar-metas', async (req, res) => {
@@ -590,7 +618,6 @@ app.post('/cadastrar-despesa-fixa', async (req, res) => {
     await client.query('BEGIN');
     const grupoId = require('crypto').randomUUID();
 
-    // Salva o contrato mestre
     await client.query(
       `INSERT INTO despesas_fixas (id_usuario, id_categoria, id_conta, valor, descricao, dia_vencimento, data_inicio, data_final, frequencia, id_grupo_vinculo)
        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
@@ -599,144 +626,40 @@ app.post('/cadastrar-despesa-fixa', async (req, res) => {
 
     const ajustarDiaUtil = (data) => {
       const d = new Date(data);
-      if (d.getDay() === 0) d.setDate(d.getDate() + 1); // Domingo -> Segunda
-      if (d.getDay() === 6) d.setDate(d.getDate() + 2); // Sábado -> Segunda
-      return d;
-    };
-
-    // Extrai os componentes numéricos puros (Ignora fuso horário de string)
-    const [anoInic, mesInic, diaInic] = data_inicio.split('-').map(Number);
-    const [anoFim, mesFim, diaFim] = data_final.split('-').map(Number);
-
-    if (frequencia === 'mensal') {
-      // Descobre quantos meses existem de intervalo entre o início e o fim do contrato
-      const totalMeses = ((anoFim - anoInic) * 12) + (mesFim - mesInic);
-
-      for (let i = 0; i <= totalMeses; i++) {
-        // Cria uma data nova do zero para cada parcela usando matemática pura
-        let anoParcela = anoInic;
-        let mesParcela = (mesInic - 1) + i; // mesInic - 1 porque Janeiro é 0 no JS
-
-        // Se a soma dos meses passar de 11 (Dezembro), o construtor do Date() do JS corrige o ano automaticamente!
-        let dataParcela = new Date(anoParcela, mesParcela, parseInt(dia_vencimento));
-
-        // Validação de segurança: a parcela precisa respeitar o teto do contrato
-        const dataLimite = new Date(anoFim, mesFim - 1, diaFim);
-        const dataMinima = new Date(anoInic, mesInic - 1, diaInic);
-
-        if (dataParcela >= dataMinima && dataParcela <= dataLimite) {
-          const dataFinalAjustada = ajustarDiaUtil(dataParcela);
-          
-          await client.query(
-            `INSERT INTO transacoes (id_usuario, id_categoria, id_conta, valor, descricao, data_transacao, tipo_movimento, id_grupo_fixo)
-             VALUES ($1, $2, $3, $4, $5, $6, 'Saída', $7)`,
-            [id_usuario, id_categoria, id_conta, -Math.abs(valor), `${descricao} (Fixo)`, dataFinalAjustada, grupoId]
-          );
-        }
-      }
-    } else {
-      // Mantém a lógica semanal isolada caso utilize
-      let dataAtual = new Date(anoInic, mesInic - 1, diaInic);
-      const dataLimite = new Date(anoFim, mesFim - 1, diaFim);
-
-      const alvo = parseInt(dia_vencimento);
-      const diff = (alvo - dataAtual.getDay() + 7) % 7;
-      dataAtual.setDate(dataAtual.getDate() + diff);
-
-      while (dataAtual <= dataLimite) {
-        const dataFinalAjustada = ajustarDiaUtil(new Date(dataAtual));
-        
-        await client.query(
-          `INSERT INTO transacoes (id_usuario, id_categoria, id_conta, valor, descricao, data_transacao, tipo_movimento, id_grupo_fixo)
-           VALUES ($1, $2, $3, $4, $5, $6, 'Saída', $7)`,
-          [id_usuario, id_categoria, id_conta, -Math.abs(valor), `${descricao} (Fixo)`, dataFinalAjustada, grupoId]
-        );
-        dataAtual.setDate(dataAtual.getDate() + 7);
-      }
-    }
-
-    await client.query('COMMIT');
-    res.status(201).json({ mensagem: "Contrato e parcelas geradas!" });
-  } catch (err) {
-    await client.query('ROLLBACK');
-    console.error(err);
-    res.status(500).json({ erro: "Erro ao processar cadastro." });
-  } finally { client.release(); }
-});
-
-// 3. EDITAR COMPLETO (RE-GERA PARCELAS FUTURAS CORRIGIDO)
-app.put('/editar-despesa-fixa/:grupoId', async (req, res) => {
-  const { grupoId } = req.params;
-  const { valor, descricao, id_categoria, id_conta, dia_vencimento, data_final, frequencia } = req.body;
-  const client = await pool.connect();
-
-  try {
-    await client.query('BEGIN');
-    
-    await client.query(
-      `UPDATE despesas_fixas 
-       SET valor = $1, descricao = $2, id_categoria = $3, id_conta = $4, dia_vencimento = $5, data_final = $6, frequencia = $7 
-       WHERE id_grupo_vinculo = $8`,
-      [valor, descricao, id_categoria, id_conta, dia_vencimento, data_final, frequencia, grupoId]
-    );
-
-    // Remove apenas os lançamentos que venceriam de hoje para a frente
-    await client.query(
-      "DELETE FROM transacoes WHERE id_grupo_fixo = $1 AND data_transacao >= CURRENT_DATE",
-      [grupoId]
-    );
-
-    const hoje = new Date();
-    let dataAtual = new Date(hoje.getFullYear(), hoje.getMonth(), hoje.getDate());
-    const [anoFim, mesFim, diaFim] = data_final.split('-').map(Number);
-    const dataLimite = new Date(anoFim, mesFim - 1, diaFim);
-
-    if (frequencia === 'semanal') {
-      const alvo = parseInt(dia_vencimento);
-      const diff = (alvo - dataAtual.getDay() + 7) % 7;
-      dataAtual.setDate(dataAtual.getDate() + diff);
-    }
-
-    const ajustarDiaUtil = (data) => {
-      const d = new Date(data);
       if (d.getDay() === 0) d.setDate(d.getDate() + 1);
       if (d.getDay() === 6) d.setDate(d.getDate() + 2);
       return d;
     };
 
-    const resUser = await client.query("SELECT id_usuario FROM despesas_fixas WHERE id_grupo_vinculo = $1", [grupoId]);
-    const id_usuario = resUser.rows[0].id_usuario;
+    const [anoInic, mesInic, diaInic] = data_inicio.split('-').map(Number);
+    const [anoFim, mesFim, diaFim] = data_final.split('-').map(Number);
+    const totalMeses = ((anoFim - anoInic) * 12) + (mesFim - mesInic);
 
-    while (dataAtual <= dataLimite) {
-      let dataParcela = new Date(dataAtual);
-      if (frequencia === 'mensal') {
-        dataParcela = new Date(dataAtual.getFullYear(), dataAtual.getMonth(), parseInt(dia_vencimento));
-      }
-
-      if (dataParcela >= new Date(hoje.getFullYear(), hoje.getMonth(), hoje.getDate()) && dataParcela <= dataLimite) {
+    for (let i = 0; i <= totalMeses; i++) {
+      let dataParcela = new Date(anoInic, (mesInic - 1) + i, parseInt(dia_vencimento));
+      const dataLimite = new Date(anoFim, mesFim - 1, diaFim);
+      
+      if (dataParcela <= dataLimite) {
         const dataFinalAjustada = ajustarDiaUtil(dataParcela);
+        // CORREÇÃO: Data ISO YYYY-MM-DD
+        const dataISO = dataFinalAjustada.toISOString().split('T')[0];
         
         await client.query(
           `INSERT INTO transacoes (id_usuario, id_categoria, id_conta, valor, descricao, data_transacao, tipo_movimento, id_grupo_fixo)
            VALUES ($1, $2, $3, $4, $5, $6, 'Saída', $7)`,
-          [id_usuario, id_categoria, id_conta, -Math.abs(valor), `${descricao} (Fixo)`, dataFinalAjustada, grupoId]
+          [id_usuario, id_categoria, id_conta, -Math.abs(valor), `${descricao} (Fixo)`, dataISO, grupoId]
         );
       }
-
-      if (frequencia === 'mensal') dataAtual.setMonth(dataAtual.getMonth() + 1);
-      else dataAtual.setDate(dataAtual.getDate() + 7);
     }
-
     await client.query('COMMIT');
-    res.json({ mensagem: "Contrato e lançamentos atualizados!" });
+    res.status(201).json({ mensagem: "Contrato e parcelas geradas!" });
   } catch (err) {
     await client.query('ROLLBACK');
-    console.error(err);
-    res.status(500).json({ erro: "Erro ao atualizar contrato." });
+    res.status(500).json({ erro: "Erro ao processar cadastro." });
   } finally { client.release(); }
 });
 
-// 3. EDITAR COMPLETO (RE-GERA PARCELAS FUTURAS)
+// 3 . EDITAR
 app.put('/editar-despesa-fixa/:grupoId', async (req, res) => {
   const { grupoId } = req.params;
   const { valor, descricao, id_categoria, id_conta, dia_vencimento, data_final, frequencia } = req.body;
@@ -759,9 +682,13 @@ app.put('/editar-despesa-fixa/:grupoId', async (req, res) => {
       [grupoId]
     );
 
-    // 3. Re-gera as transações futuras com os novos dados
+    // 3. Re-gera as transações futuras
+    const resUser = await client.query("SELECT id_usuario FROM despesas_fixas WHERE id_grupo_vinculo = $1", [grupoId]);
+    const id_usuario = resUser.rows[0].id_usuario;
+
     let dataAtual = new Date(); // Começa a partir de hoje
-    const dataLimite = new Date(data_final);
+    const [anoFim, mesFim, diaFim] = data_final.split('-').map(Number);
+    const dataLimite = new Date(anoFim, mesFim - 1, diaFim);
 
     if (frequencia === 'semanal') {
       const alvo = parseInt(dia_vencimento);
@@ -770,27 +697,29 @@ app.put('/editar-despesa-fixa/:grupoId', async (req, res) => {
     }
 
     const ajustarDiaUtil = (data) => {
-        const d = new Date(data);
-        if (d.getDay() === 0) d.setDate(d.getDate() + 1);
-        if (d.getDay() === 6) d.setDate(d.getDate() + 2);
-        return d;
+      const d = new Date(data);
+      if (d.getDay() === 0) d.setDate(d.getDate() + 1);
+      if (d.getDay() === 6) d.setDate(d.getDate() + 2);
+      return d;
     };
 
     while (dataAtual <= dataLimite) {
       let dataParcela = new Date(dataAtual);
-      if (frequencia === 'mensal') dataParcela.setDate(parseInt(dia_vencimento));
+      if (frequencia === 'mensal') {
+        dataParcela = new Date(dataAtual.getFullYear(), dataAtual.getMonth(), parseInt(dia_vencimento));
+      }
 
       const dataFinalAjustada = ajustarDiaUtil(dataParcela);
-      
-      // Busca o id_usuario original para manter o vínculo
-      const resUser = await client.query("SELECT id_usuario FROM despesas_fixas WHERE id_grupo_vinculo = $1", [grupoId]);
-      const id_usuario = resUser.rows[0].id_usuario;
+      // CORREÇÃO: Formato YYYY-MM-DD para evitar fuso horário
+      const dataISO = dataFinalAjustada.toISOString().split('T')[0];
 
-      await client.query(
-        `INSERT INTO transacoes (id_usuario, id_categoria, id_conta, valor, descricao, data_transacao, tipo_movimento, id_grupo_fixo)
-         VALUES ($1, $2, $3, $4, $5, $6, 'Saída', $7)`,
-        [id_usuario, id_categoria, id_conta, -Math.abs(valor), `${descricao} (Fixo)`, dataFinalAjustada, grupoId]
-      );
+      if (dataParcela >= new Date().setHours(0,0,0,0)) {
+        await client.query(
+          `INSERT INTO transacoes (id_usuario, id_categoria, id_conta, valor, descricao, data_transacao, tipo_movimento, id_grupo_fixo)
+           VALUES ($1, $2, $3, $4, $5, $6, 'Saída', $7)`,
+          [id_usuario, id_categoria, id_conta, -Math.abs(valor), `${descricao} (Fixo)`, dataISO, grupoId]
+        );
+      }
 
       if (frequencia === 'mensal') dataAtual.setMonth(dataAtual.getMonth() + 1);
       else dataAtual.setDate(dataAtual.getDate() + 7);
@@ -800,6 +729,7 @@ app.put('/editar-despesa-fixa/:grupoId', async (req, res) => {
     res.json({ mensagem: "Contrato e lançamentos atualizados!" });
   } catch (err) {
     await client.query('ROLLBACK');
+    console.error(err);
     res.status(500).json({ erro: "Erro ao atualizar contrato." });
   } finally { client.release(); }
 });

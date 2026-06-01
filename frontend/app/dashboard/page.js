@@ -35,7 +35,6 @@ export default function Dashboard() {
       const dadosSaldos = resSaldos.ok ? await resSaldos.json() : []
       const dadosMetas = resMetas.ok ? await resMetas.json() : []
       
-      // CORREÇÃO: Extrai corretamente os registros se o backend retornar formato paginado
       const listaValida = Array.isArray(dadosTrans) ? dadosTrans : (dadosTrans.registros || [])
       
       setTransacoes(listaValida)
@@ -55,28 +54,40 @@ export default function Dashboard() {
 
   useEffect(() => { carregarDados() }, [])
 
-  // Lógica de Filtro por Período
+  // Lógica de Filtro por Período e Validação de Data Futura
   useEffect(() => {
-    const hoje = new Date()
-    const mesAtual = hoje.getMonth() 
-    const anoAtual = hoje.getFullYear()
+    const hojeSemHora = new Date()
+    hojeSemHora.setHours(0, 0, 0, 0)
+
+    const mesAtual = hojeSemHora.getMonth() 
+    const anoAtual = hojeSemHora.getFullYear()
 
     let filtradas = transacoes.filter(t => {
       if (!t.data_transacao) return false
 
       try {
-        const dataPura = String(t.data_transacao).split('T')[0]
+        let dataPura = String(t.data_transacao).split('T')[0]
+
+        if (dataPura.includes('/')) {
+          const [d, m, a] = dataPura.split('/')
+          dataPura = `${a}-${m.padStart(2, '0')}-${d.padStart(2, '0')}`
+        }
+
         const [ano, mes, dia] = dataPura.split('-').map(Number)
+        const dataLancamento = new Date(ano, mes - 1, dia)
+
+        // Se o lançamento for futuro, barra imediatamente do Dashboard ativo
+        if (dataLancamento > hojeSemHora) return false
 
         if (periodo === 'mes') {
           return (mes - 1) === mesAtual && ano === anoAtual
         } 
         
         if (periodo === 'semana') {
-          const dataT = new Date(ano, mes - 1, dia)
           const seteDiasAtras = new Date()
-          seteDiasAtras.setDate(hoje.getDate() - 7)
-          return dataT >= seteDiasAtras
+          seteDiasAtras.setDate(hojeSemHora.getDate() - 7)
+          seteDiasAtras.setHours(0, 0, 0, 0)
+          return dataLancamento >= seteDiasAtras
         }
 
         return true 
@@ -85,6 +96,28 @@ export default function Dashboard() {
 
     setTransacoesFiltradas(filtradas)
   }, [periodo, transacoes])
+
+  // --- AJUSTE CRÍTICO: Deduz os lançamentos futuros do saldo total das contas para bater com o "Minhas Contas" ---
+  const saldosContasAjustados = saldosContas.map(c => {
+    const transacoesFuturasDaConta = transacoes.filter(t => {
+      if (Number(t.id_conta) !== Number(c.id_conta)) return false
+      if (!t.data_transacao) return false
+      const dataPura = String(t.data_transacao).split('T')[0]
+      const [ano, mes, dia] = dataPura.split('-').map(Number)
+      const dataLancamento = new Date(ano, mes - 1, dia)
+      const hoje = new Date()
+      hoje.setHours(0,0,0,0)
+      return dataLancamento > hoje
+    })
+
+    const totalFuturo = transacoesFuturasDaConta.reduce((acc, t) => acc + parseFloat(t.valor || 0), 0)
+    const saldoRealHoje = parseFloat(c.saldo_atual || 0) - totalFuturo
+
+    return {
+      ...c,
+      saldo_ajustado: saldoRealHoje
+    }
+  })
 
   // --- FUNÇÕES DE AGRUPAMENTO PARA OS GRÁFICOS ---
   const resumoGeral = [
@@ -122,7 +155,7 @@ export default function Dashboard() {
   }
 
   const dadosMovimentacaoPorConta = () => {
-    return saldosContas.map(conta => {
+    return saldosContasAjustados.map(conta => {
       const lancamentosDaConta = transacoesFiltradas.filter(t => 
         Number(t.id_conta) === Number(conta.id_conta)
       )
@@ -182,14 +215,14 @@ export default function Dashboard() {
             ) : (
               <div className="h-48"> 
                 <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={saldosContas.map(c => ({ name: c.nome_conta, valor: parseFloat(c.saldo_atual || 0) }))}>
+                  <BarChart data={saldosContasAjustados.map(c => ({ name: c.nome_conta, valor: c.saldo_ajustado }))}>
                     <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
                     <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{fill: '#94a3b8', fontWeight: '600', fontSize: 11}} />
-                    <YAxis axisLine={false} tickLine={false} tick={{fill: '#94a3b8', fontWeight: '600', fontSize: 11}} tickFormatter={(value) => `R$ ${value}`} />
+                    <YAxis axisLine={false} tickLine={false} tick={{fill: '#94a3b8', fontWeight: '600', fontSize: 11}} />
                     <Tooltip cursor={{fill: 'transparent'}} contentStyle={{borderRadius: '16px', border: 'none', boxShadow: '0 10px 25px -5px rgba(0,0,0,0.05)'}} formatter={(value) => [`R$ ${Number(value).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`, 'Saldo Atual']} />
                     <Bar dataKey="valor" radius={[8, 8, 0, 0]} barSize={20}>
-                      {saldosContas.map((entry, index) => (
-                        <Cell key={index} fill={parseFloat(entry.saldo_atual || 0) >= 0 ? '#10b981' : '#f43f5e'} />
+                      {saldosContasAjustados.map((entry, index) => (
+                        <Cell key={index} fill={entry.saldo_ajustado >= 0 ? '#10b981' : '#f43f5e'} />
                       ))}
                     </Bar>
                   </BarChart>
